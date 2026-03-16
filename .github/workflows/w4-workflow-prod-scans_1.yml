@@ -159,14 +159,7 @@ jobs:
         pip3 install .
         pip3 install tensorflow==2.16.1
 
-    - name: Environment setup to check the market status
-      shell: bash
-      id: marketsetter
-      run: |
-        python3 .github/workflows/workflowtriggers.py
-
     - name: Configure env.dev file
-      if : ${{ steps.marketsetter.outputs.MARKET_STATUS == 'Open' || steps.marketsetter.outputs.MARKET_TRADED_TODAY == '1' }}
       shell: bash
       env:
         CHAT_ID_PROD : ${{secrets.CHAT_ID_PROD}}
@@ -238,6 +231,12 @@ jobs:
         
         echo "Created .env.dev file with secrets (values quoted)"
         cp .env.dev /home/runner/work/PKScreener/PKScreener/pkscreener/.env.dev
+
+    - name: Environment setup to check the market status
+      shell: bash
+      id: marketsetter
+      run: |
+        python3 .github/workflows/workflowtriggers.py
 
     - name: 1. Next day Nifty/Market AI prediction
       if : ${{ steps.marketsetter.outputs.MARKET_STATUS == 'Open' || steps.marketsetter.outputs.MARKET_TRADED_TODAY == '1' }}
