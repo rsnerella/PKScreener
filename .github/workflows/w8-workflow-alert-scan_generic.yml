@@ -155,14 +155,27 @@ jobs:
         PARAMS="${{ inputs.params }}"
         echo "Checking parameters: $PARAMS"
         
-        # Look for pattern -o X:N:D:D:D:D:D (where X is any letter, N is any number, D is any digit)
-        # This regex matches -o followed by space, then X: (any letter), number, colon, then any number of D: patterns
-        if [[ "$PARAMS" =~ -o[[:space:]]+[A-Za-z]:[0-9]+(:[0-9]+){5,} ]]; then
-          echo "✅ TensorFlow pattern detected: ${BASH_REMATCH[0]}"
-          echo "requires_tensorflow=true" >> $GITHUB_OUTPUT
-          echo "TF_VERSION=2.16.1" >> $GITHUB_OUTPUT
+        # Remove extra spaces and normalize
+        NORMALIZED=$(echo "$PARAMS" | sed 's/  */ /g')
+        echo "Normalized: $NORMALIZED"
+        
+        # Extract the -o parameter value
+        if [[ "$NORMALIZED" =~ -o[[:space:]]*([^[:space:]]+) ]]; then
+          O_VALUE="${BASH_REMATCH[1]}"
+          echo "Found -o parameter: $O_VALUE"
+          
+          # Check if it matches the pattern X:N:D:D:D:D:D
+          # Where X is any letter, N is any number, and there are at least 5 D's
+          if [[ "$O_VALUE" =~ ^[A-Za-z]:[0-9]+(:[0-9]+){5,}$ ]]; then
+            echo "✅ TensorFlow pattern detected: $O_VALUE"
+            echo "requires_tensorflow=true" >> $GITHUB_OUTPUT
+            echo "TF_VERSION=2.16.1" >> $GITHUB_OUTPUT
+          else
+            echo "❌ -o value does not match TensorFlow pattern: $O_VALUE"
+            echo "requires_tensorflow=false" >> $GITHUB_OUTPUT
+          fi
         else
-          echo "❌ No TensorFlow pattern detected"
+          echo "❌ No -o parameter found in arguments"
           echo "requires_tensorflow=false" >> $GITHUB_OUTPUT
         fi
 
