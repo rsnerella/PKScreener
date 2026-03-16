@@ -187,6 +187,10 @@ jobs:
         import tensorflow as tf
         print(f'✅ TensorFlow {tf.__version__} installed successfully')
         print(f'   GPU available: {tf.config.list_physical_devices(\"GPU\")}')"
+        pip install keras==3.6.0
+        python -c "
+        import keras
+        print(f'✅ Keras {keras.__version__} installed successfully')"
 
     - name: Environment setup to get latest EXE
       shell: bash
