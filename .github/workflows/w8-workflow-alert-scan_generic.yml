@@ -457,6 +457,6 @@ jobs:
       run: |
         ${{ inputs.prerequisites }}
         cd /home/runner/work/PKScreener/PKScreener/
-        python3 pkscreenerpkscreenercli.py ${{ inputs.params }}
+        python3 pkscreener/pkscreenercli.py ${{ inputs.params }}
         ${{ inputs.postrun }}
 
