@@ -145,37 +145,31 @@ jobs:
         cd /home/runner/work/PKScreener/PKScreener/
         pip3 install ta-lib==0.6.0
 
-    # ============================================================================
+        # ============================================================================
     # CHECK FOR TENSORFLOW REQUIREMENT
     # ============================================================================
-    - name: Check if TensorFlow is required (X:N:D:D:D:D:D pattern)
+    - name: Check if TensorFlow is required (literal patterns)
       id: check-tensorflow
       shell: bash
       run: |
         PARAMS="${{ inputs.params }}"
         echo "Checking parameters: $PARAMS"
         
-        # Remove extra spaces and normalize
-        NORMALIZED=$(echo "$PARAMS" | sed 's/  */ /g')
-        echo "Normalized: $NORMALIZED"
-        
-        # Extract the -o parameter value
-        if [[ "$NORMALIZED" =~ -o[[:space:]]*([^[:space:]]+) ]]; then
-          O_VALUE="${BASH_REMATCH[1]}"
-          echo "Found -o parameter: $O_VALUE"
+        # Look for EXACT literal patterns:
+        # Pattern 1: -o X:N: (with nothing else after)
+        if [[ "$PARAMS" =~ -o[[:space:]]*X:N:([[:space:]]|$) ]]; then
+          echo "✅ Exact 'X:N:' pattern detected"
+          echo "requires_tensorflow=true" >> $GITHUB_OUTPUT
+          echo "TF_VERSION=2.16.1" >> $GITHUB_OUTPUT
           
-          # Check if it matches the pattern X:N:D:D:D:D:D
-          # Where X is any letter, N is any number, and there are at least 5 D's
-          if [[ "$O_VALUE" =~ ^[A-Za-z]:[0-9]+(:[0-9]+){5,}$ ]]; then
-            echo "✅ TensorFlow pattern detected: $O_VALUE"
-            echo "requires_tensorflow=true" >> $GITHUB_OUTPUT
-            echo "TF_VERSION=2.16.1" >> $GITHUB_OUTPUT
-          else
-            echo "❌ -o value does not match TensorFlow pattern: $O_VALUE"
-            echo "requires_tensorflow=false" >> $GITHUB_OUTPUT
-          fi
+        # Pattern 2: -o X:N:D:D:D:D:D (exact literal with D's)
+        elif [[ "$PARAMS" =~ -o[[:space:]]*X:N:D:D:D:D:D([[:space:]]|$) ]]; then
+          echo "✅ Exact 'X:N:D:D:D:D:D' pattern detected"
+          echo "requires_tensorflow=true" >> $GITHUB_OUTPUT
+          echo "TF_VERSION=2.16.1" >> $GITHUB_OUTPUT
+          
         else
-          echo "❌ No -o parameter found in arguments"
+          echo "❌ No TensorFlow pattern detected"
           echo "requires_tensorflow=false" >> $GITHUB_OUTPUT
         fi
 
