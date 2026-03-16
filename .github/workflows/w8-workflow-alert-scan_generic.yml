@@ -191,6 +191,7 @@ jobs:
         python -c "
         import keras
         print(f'✅ Keras {keras.__version__} installed successfully')"
+        pip3 install .
 
     - name: Environment setup to get latest EXE
       shell: bash
@@ -430,7 +431,7 @@ jobs:
     - name: Run Scan on Ubuntu
       shell: bash
       timeout-minutes: 10
-      if: startsWith(runner.os, 'Linux')
+      if: startsWith(runner.os, 'Linux') && steps.check-tensorflow.outputs.requires_tensorflow != 'true'
       env:
         RUNNER : "GitHub_Actions"
         GSHEET_SERVICE_ACCOUNT_DEV: ${{secrets.GSHEET_SERVICE_ACCOUNT_DEV}}
@@ -442,3 +443,20 @@ jobs:
         pip3 install libsql
         /home/runner/work/PKScreener/PKScreener/pkscreenercli_x64.bin ${{ inputs.params }}
         ${{ inputs.postrun }}
+
+    - name: Run Scan on Ubuntu
+      shell: bash
+      if: steps.check-tensorflow.outputs.requires_tensorflow == 'true' && startsWith(runner.os, 'Linux')
+      timeout-minutes: 10
+      env:
+        RUNNER : "GitHub_Actions"
+        GSHEET_SERVICE_ACCOUNT_DEV: ${{secrets.GSHEET_SERVICE_ACCOUNT_DEV}}
+        GSHEET_VIEWONLY_LINK: ${{secrets.GSHEET_VIEWONLY_LINK}}
+        ALERT_TRIGGER: ${{ inputs.alertTrigger || 'N' }}
+        TF_CPP_MIN_LOG_LEVEL: ${{ steps.check-tensorflow.outputs.requires_tensorflow == 'true' && '2' || '' }}
+      run: |
+        ${{ inputs.prerequisites }}
+        cd /home/runner/work/PKScreener/PKScreener/
+        python3 pkscreenerpkscreenercli.py ${{ inputs.params }}
+        ${{ inputs.postrun }}
+
