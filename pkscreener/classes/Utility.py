@@ -270,6 +270,12 @@ class tools:
             os.path.join(Archiver.get_user_data_dir(), "nifty_model_v2.h5"),
             os.path.join(Archiver.get_user_data_dir(), "nifty_model_v2.pkl"),
         ]
+        import warnings
+        # Suppress the specific warning
+        warnings.filterwarnings('ignore', module='absl')
+        # Or for more aggressive suppression
+        import logging
+        logging.getLogger('absl').setLevel(logging.ERROR)
         model = None
         pkl = None
         urls = [
