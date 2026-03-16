@@ -424,7 +424,7 @@ class PKImageTools:
             )
             im = PKImageTools.addQuickWatermark(
                 im, dimensions.get('xVertical', None),
-                dataSrc="Yahoo!finance; Morningstar, Inc; National Stock Exchange of India Ltd;TradingHours.com;",
+                dataSrc="Zerodha;Morningstar;NNSE;TradingHours;",
                 dataSrcFontSize=ART_FONT_SIZE
             )
             im.save(
