@@ -2433,7 +2433,7 @@ def printNotifySaveScreenedResults(
                     else ""
                 )
                 caption = f"{title}"
-                elapsed_text = f"<i>({len(saveResults)}{'+' if (len(saveResults) > MAX_ALLOWED) else ''} stocks found in {str(int(elapsed_time))} sec. Queue Wait Time:{int(PKDateUtilities.currentDateTimestamp()-userPassedArgs.triggertimestamp-int(elapsed_time))}s){warn_text}</i>"
+                elapsed_text = f"<i>({len(saveResults)}{'+' if (len(saveResults) > MAX_ALLOWED) else ''} {'stocks' if len(saveResults) > 1 else 'stock'} found in {str(int(elapsed_time))}s. Queue Wait Time:{int(PKDateUtilities.currentDateTimestamp()-userPassedArgs.triggertimestamp-int(elapsed_time))}s){warn_text}</i>"
                 backtestExtension = "_backtest.png"
                 if len(screenResultsTrimmed) > MAX_ALLOWED:
                     screenResultsTrimmed = screenResultsTrimmed.head(MAX_ALLOWED)
@@ -2489,8 +2489,8 @@ def printNotifySaveScreenedResults(
                         maxcolwidths=[None,None,4,3]
                     ).encode("utf-8").decode(STD_ENCODING).replace("-K-----S-----C-----R","-K-----S----C---R").replace("%  ","% ").replace("=K=====S=====C=====R","=K=====S====C===R").replace("Vol  |","Vol|").replace("Hgh  |","Hgh|").replace("EoD  |","EoD|").replace("x  ","x")
                     caption_results = ImageUtility.PKImageTools.removeAllColorStyles(caption_results.replace("-E-----N-----E-----R","-E-----N----E---R").replace("=E=====N=====E=====R","=E=====N====E===R"))
-                    suggestion_text = "Try @nse_pkscreener_bot for more scans! <i><b><u>You agree that you have read</u></b>:https://pkjmesra.github.io/PKScreener/Disclaimer.txt</i> <b>and accept TOS</b>: https://pkjmesra.github.io/PKScreener/tos.txt <b>STOP using and exit from channel/group, if you do not</b>"
-                    finalCaption = f"{caption}.Feel free to share on social media.open attached image for more. Samples:<pre>{caption_results}</pre>{elapsed_text} {suggestion_text}"
+                    suggestion_text = "Try @nse_pkscreener_bot for more scans! <i><b><u>You agree that you have read</u></b>:<a href='https://pkjmesra.github.io/PKScreener/Disclaimer.txt'>Disclaimer</a></i> <b>and accept</b>:<a href='https://pkjmesra.github.io/PKScreener/tos.txt'>TOS</a>.<b>Kindly STOP and EXIT from channel/group otherwise.</b>"
+                    finalCaption = f"{caption}.Do share on social media! Open attachments for more. Samples<pre>{caption_results}</pre>{elapsed_text} {suggestion_text}"
                 if not testing:
                     if PKDateUtilities.isTradingTime() and not PKDateUtilities.isTodayHoliday()[0]:
                         kite_file_path, kite_caption = sendKiteBasketOrderReviewDetails(saveResultsTrimmed,runOptionName,caption,user)
@@ -3083,7 +3083,7 @@ def saveNotifyResultsFile(
 
 def sendGlobalMarketBarometer(userArgs=None):
     from pkscreener.classes import Barometer
-    suggestion_text = "Feel free to share on social media.Try @nse_pkscreener_bot for more scans! <i><b><u>You agree that you have read</u></b>:https://pkjmesra.github.io/PKScreener/Disclaimer.txt</i> <b>and accept TOS</b>: https://pkjmesra.github.io/PKScreener/tos.txt <b>STOP using and exit from channel/group, if you do not.</b>"
+    suggestion_text = "Do share on social media.Try @nse_pkscreener_bot for more scans!<i><b><u>You agree that you have read</u></b>:<a href='https://pkjmesra.github.io/PKScreener/Disclaimer.txt'>Disclaimer</a></i> <b>and accept</b>:<a href='https://pkjmesra.github.io/PKScreener/tos.txt'>TOS</a>.<b>Kindly STOP and EXIT from channel/group otherwise.</b>"
     caption = f"Global Market Barometer with India market Performance (top) and Valuation (bottom).{suggestion_text}"
     gmbPath = Barometer.getGlobalMarketBarometerValuation()
     try:
