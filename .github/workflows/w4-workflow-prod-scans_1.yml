@@ -123,41 +123,42 @@ jobs:
         cd /home/runner/work/PKScreener/PKScreener/
         pip3 install ta-lib
           
-    - name: Environment setup to get latest EXE
-      shell: bash
-      id: releaseurlsetter
-      run: |
-        pip3 install requests
-        python3 .github/workflows/githubutilities.py -d
+    # - name: Environment setup to get latest EXE
+    #   shell: bash
+    #   id: releaseurlsetter
+    #   run: |
+    #     pip3 install requests
+    #     python3 .github/workflows/githubutilities.py -d
   
-    - name: Download latest executable on Windows
-      shell: cmd
-      if: ${{ startsWith(runner.os, 'Windows' ) }}
-      env:
-        exe_path: ${{ steps.releaseurlsetter.outputs.DOWNLOAD_URL }}
-      run: |
-        curl -o pkscreenercli.exe -JL %exe_path%
+    # - name: Download latest executable on Windows
+    #   shell: cmd
+    #   if: ${{ startsWith(runner.os, 'Windows' ) }}
+    #   env:
+    #     exe_path: ${{ steps.releaseurlsetter.outputs.DOWNLOAD_URL }}
+    #   run: |
+    #     curl -o pkscreenercli.exe -JL %exe_path%
 
-    - name: Download latest executable on Ubuntu
-      shell: bash
-      if: ${{ startsWith(runner.os, 'Linux' ) }}
-      env:
-        exe_path: ${{ steps.releaseurlsetter.outputs.DOWNLOAD_URL }}
-      run: |
-        curl -o /home/runner/work/PKScreener/PKScreener/pkscreenercli_x64.bin -JL $exe_path
-        chmod +x /home/runner/work/PKScreener/PKScreener/pkscreenercli_x64.bin
-        # Validate binary format
-        if ! file /home/runner/work/PKScreener/PKScreener/pkscreenercli_x64.bin | grep -q "ELF 64-bit"; then
-          echo "ERROR: Downloaded file is not a valid Linux ELF binary"
-          file /home/runner/work/PKScreener/PKScreener/pkscreenercli_x64.bin
-          exit 1
-        fi
+    # - name: Download latest executable on Ubuntu
+    #   shell: bash
+    #   if: ${{ startsWith(runner.os, 'Linux' ) }}
+    #   env:
+    #     exe_path: ${{ steps.releaseurlsetter.outputs.DOWNLOAD_URL }}
+    #   run: |
+    #     curl -o /home/runner/work/PKScreener/PKScreener/pkscreenercli_x64.bin -JL $exe_path
+    #     chmod +x /home/runner/work/PKScreener/PKScreener/pkscreenercli_x64.bin
+    #     # Validate binary format
+    #     if ! file /home/runner/work/PKScreener/PKScreener/pkscreenercli_x64.bin | grep -q "ELF 64-bit"; then
+    #       echo "ERROR: Downloaded file is not a valid Linux ELF binary"
+    #       file /home/runner/work/PKScreener/PKScreener/pkscreenercli_x64.bin
+    #       exit 1
+    #     fi
 
     - name: Install Python Dependencies
       run: |
         pip3 install -r requirements.txt
         pip3 install .
         pip3 install tensorflow==2.16.1
+        pip install keras==3.6.0
 
     - name: Configure env.dev file
       shell: bash
@@ -238,14 +239,26 @@ jobs:
       run: |
         python3 .github/workflows/workflowtriggers.py
 
-    - name: 1. Next day Nifty/Market AI prediction
-      if : ${{ steps.marketsetter.outputs.MARKET_STATUS == 'Open' || steps.marketsetter.outputs.MARKET_TRADED_TODAY == '1' }}
+    # - name: 1. Next day Nifty/Market AI prediction
+    #   if : ${{ steps.marketsetter.outputs.MARKET_STATUS == 'Open' || steps.marketsetter.outputs.MARKET_TRADED_TODAY == '1' }}
+    #   shell: bash
+    #   env:
+    #     RUNNER : "GitHub_Actions"
+    #     ALERT_TRIGGER : "Y"
+    #   run: |
+    #     /home/runner/work/PKScreener/PKScreener/pkscreenercli_x64.bin -a Y -l -o X:N -e
+
+    - name: Run Scan on Ubuntu from src with TensorFlow (if required)
       shell: bash
+      if : ${{ steps.marketsetter.outputs.MARKET_STATUS == 'Open' || steps.marketsetter.outputs.MARKET_TRADED_TODAY == '1' }}
+      timeout-minutes: 10
       env:
         RUNNER : "GitHub_Actions"
-        ALERT_TRIGGER : "Y"
+        GSHEET_SERVICE_ACCOUNT_DEV: ${{secrets.GSHEET_SERVICE_ACCOUNT_DEV}}
+        GSHEET_VIEWONLY_LINK: ${{secrets.GSHEET_VIEWONLY_LINK}}
       run: |
-        /home/runner/work/PKScreener/PKScreener/pkscreenercli_x64.bin -a Y -l -o X:N -e
+        cd /home/runner/work/PKScreener/PKScreener/
+        python3 pkscreener/pkscreenercli.py  -a Y -l -o X:N -e
 
   HOLIDAYS_UPDATE:
     runs-on: ${{ inputs.runson || 'ubuntu-latest' }} #ubuntu-latest #windows-latest

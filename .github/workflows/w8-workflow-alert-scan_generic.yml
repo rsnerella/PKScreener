@@ -145,31 +145,31 @@ jobs:
         cd /home/runner/work/PKScreener/PKScreener/
         pip3 install ta-lib==0.6.0
 
-        # ============================================================================
+    # ============================================================================
     # CHECK FOR TENSORFLOW REQUIREMENT
     # ============================================================================
-    - name: Check if TensorFlow is required (literal patterns)
+    - name: Check if TensorFlow is required (X:N pattern)
       id: check-tensorflow
       shell: bash
       run: |
         PARAMS="${{ inputs.params }}"
         echo "Checking parameters: $PARAMS"
         
-        # Look for EXACT literal patterns:
-        # Pattern 1: -o X:N: (with nothing else after)
-        if [[ "$PARAMS" =~ -o[[:space:]]*X:N:([[:space:]]|$) ]]; then
-          echo "✅ Exact 'X:N:' pattern detected"
+        # Look for -o followed by anything containing the literal "X:N"
+        # This will match:
+        #   -o X:N
+        #   -o X:N:
+        #   -o X:N::
+        #   -o X:N:D:D:D:D:D
+        #   -o X:N::D:D:D:D:D
+        #   etc.
+        if [[ "$PARAMS" =~ -o[[:space:]]*[^[:space:]]*X:N[^[:space:]]*([[:space:]]|$) ]]; then
+          MATCHED="${BASH_REMATCH[0]}"
+          echo "✅ X:N pattern detected in: $MATCHED"
           echo "requires_tensorflow=true" >> $GITHUB_OUTPUT
           echo "TF_VERSION=2.16.1" >> $GITHUB_OUTPUT
-          
-        # Pattern 2: -o X:N:D:D:D:D:D (exact literal with D's)
-        elif [[ "$PARAMS" =~ -o[[:space:]]*X:N:D:D:D:D:D([[:space:]]|$) ]]; then
-          echo "✅ Exact 'X:N:D:D:D:D:D' pattern detected"
-          echo "requires_tensorflow=true" >> $GITHUB_OUTPUT
-          echo "TF_VERSION=2.16.1" >> $GITHUB_OUTPUT
-          
         else
-          echo "❌ No TensorFlow pattern detected"
+          echo "❌ No X:N pattern detected"
           echo "requires_tensorflow=false" >> $GITHUB_OUTPUT
         fi
 
@@ -444,7 +444,7 @@ jobs:
         /home/runner/work/PKScreener/PKScreener/pkscreenercli_x64.bin ${{ inputs.params }}
         ${{ inputs.postrun }}
 
-    - name: Run Scan on Ubuntu
+    - name: Run Scan on Ubuntu from src with TensorFlow (if required)
       shell: bash
       if: steps.check-tensorflow.outputs.requires_tensorflow == 'true' && startsWith(runner.os, 'Linux')
       timeout-minutes: 10

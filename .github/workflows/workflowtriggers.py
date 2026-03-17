@@ -878,6 +878,7 @@ def shouldRunBacktests(backtestName="",df=None):
 def updateHolidays():
     _, raw = nse.updatedHolidays()
     if raw is None or len(raw) == 0:
+        print(f"{datetime.datetime.now(pytz.timezone('Asia/Kolkata'))} : No updates found for holidays!")
         return
     import json
     holidays_file = os.path.join(os.getcwd(),".github/dependencies/nse-holidays.json")
