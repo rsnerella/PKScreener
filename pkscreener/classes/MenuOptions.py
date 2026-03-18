@@ -136,7 +136,7 @@ LEVEL_1_DATA_DOWNLOADS = {
     "S": "NSE Symbols with Sector/Industry Details",
     "M": "Back to the Top/Main menu",
 }
-PREDEFINED_SCAN_ALERT_MENU_KEYS = ["2","5","6","18","25","27","29","30","31","32","33","34"]
+PREDEFINED_SCAN_ALERT_MENU_KEYS = ["2"]
 PREDEFINED_SCAN_MENU_TEXTS = [
     "Volume Scanners | High Momentum | Breaking Out Now | ATR Cross     ",  # 1
     "Volume Scanners | High Momentum | ATR Cross",                          # 2
