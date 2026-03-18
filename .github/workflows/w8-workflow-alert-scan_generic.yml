@@ -487,18 +487,18 @@ jobs:
         /home/runner/work/PKScreener/PKScreener/pkscreenercli_x64.bin ${{ inputs.params }}
         ${{ inputs.postrun }}
 
-    - name: Run Scan on Ubuntu from source with TensorFlow (if required)
-      shell: bash
-      if: steps.check-tensorflow.outputs.requires_tensorflow == 'true' && startsWith(runner.os, 'Linux')
-      timeout-minutes: 15  # Increased timeout for TensorFlow runs
-      env:
-        RUNNER : "GitHub_Actions"
-        GSHEET_SERVICE_ACCOUNT_DEV: ${{secrets.GSHEET_SERVICE_ACCOUNT_DEV}}
-        GSHEET_VIEWONLY_LINK: ${{secrets.GSHEET_VIEWONLY_LINK}}
-        ALERT_TRIGGER: ${{ inputs.alertTrigger || 'N' }}
-        TF_CPP_MIN_LOG_LEVEL: "2"
-      run: |
-        ${{ inputs.prerequisites }}
-        cd /home/runner/work/PKScreener/PKScreener/
-        python3 pkscreener/pkscreenercli.py ${{ inputs.params }}
-        ${{ inputs.postrun }}
+    # - name: Run Scan on Ubuntu from source with TensorFlow (if required)
+    #   shell: bash
+    #   if: steps.check-tensorflow.outputs.requires_tensorflow == 'true' && startsWith(runner.os, 'Linux')
+    #   timeout-minutes: 15  # Increased timeout for TensorFlow runs
+    #   env:
+    #     RUNNER : "GitHub_Actions"
+    #     GSHEET_SERVICE_ACCOUNT_DEV: ${{secrets.GSHEET_SERVICE_ACCOUNT_DEV}}
+    #     GSHEET_VIEWONLY_LINK: ${{secrets.GSHEET_VIEWONLY_LINK}}
+    #     ALERT_TRIGGER: ${{ inputs.alertTrigger || 'N' }}
+    #     TF_CPP_MIN_LOG_LEVEL: "2"
+    #   run: |
+    #     ${{ inputs.prerequisites }}
+    #     cd /home/runner/work/PKScreener/PKScreener/
+    #     python3 pkscreener/pkscreenercli.py ${{ inputs.params }}
+    #     ${{ inputs.postrun }}
