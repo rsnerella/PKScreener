@@ -50,7 +50,7 @@ jobs:
     # Phase 4: Matrix-based parallel execution for 4x throughput
     strategy:
       matrix:
-        scan_group: [1, 2, 3, 4]
+        scan_group: [1]
       fail-fast: false
       max-parallel: 4
 
