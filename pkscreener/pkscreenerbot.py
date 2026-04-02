@@ -1213,6 +1213,7 @@ def Level2(update: Update, context: CallbackContext) -> str:
                 skip=SCANNER_SKIP_MENUS_1_TO_6,
                 renderStyle=MenuRenderStyle.STANDALONE,
             )
+            menuText = menuText if menuText is not None else ""
             menuText = menuText + "\n\nP1 > More options"
             menuText = menuText + "\nH > Home"
             mns = m2.renderForMenu(
@@ -1915,7 +1916,13 @@ def error_handler(update: object, context: CallbackContext) -> None:
                 )
         except Exception:# pragma: no cover
             print(tb_string)
-
+    finally:
+        if "telegram.error.Conflict" not in message:
+            sendUpdatedMenu(
+                menuText="Aw snap! We encountered an error. Please try again using /start .\n", 
+                update=update, context=context, 
+                reply_markup=default_markup()
+            )
 
 def command_handler(update: Update, context: CallbackContext) -> None:
     if _shouldAvoidResponse(update):
