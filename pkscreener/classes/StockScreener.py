@@ -94,7 +94,17 @@ class StockScreener:
         assert (
             hostRef is not None
         ), "hostRef argument must not be None. It should be an instance of PKMultiProcessorClient"
-        if stock is None or len(stock) == 0 or " " in stock or "BOND-" in stock.upper() or "DEBT-" in stock.upper():
+        # Define invalid patterns once (outside your loop/function)
+        INVALID_STOCK_PREFIXES = ("BOND-", "DEBT-", "PREF-", "NCD-", "PSU-", 
+                                "MUTUALFUND-", "ETF-", "FOF-", "LIQUID-", "ULTRALIQUID-")
+        INVALID_STOCK_NAMES = ("NIFTY", "BANKNIFTY", "FINNIFTY", "INDIAVIX")
+
+        # The optimized condition
+        if (not stock or 
+            " " in str(stock) or 
+            stock.upper().startswith(INVALID_STOCK_PREFIXES) or 
+            stock.upper() in INVALID_STOCK_NAMES):
+            # Handle invalid stock
             return None
         self.setupLogger(log_level=logLevel)
         configManager = hostRef.configManager
