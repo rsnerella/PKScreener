@@ -94,7 +94,7 @@ class StockScreener:
         assert (
             hostRef is not None
         ), "hostRef argument must not be None. It should be an instance of PKMultiProcessorClient"
-        if stock is None or len(stock) == 0:
+        if stock is None or len(stock) == 0 or " " in stock or "BOND-" in stock.upper() or "DEBT-" in stock.upper():
             return None
         self.setupLogger(log_level=logLevel)
         configManager = hostRef.configManager
