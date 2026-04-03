@@ -172,14 +172,6 @@ jobs:
         cd /home/runner/work/PKScreener/PKScreener/
         pip install ta-lib==0.6.0
 
-    # Install base Python dependencies (will use pip cache if available)
-    - name: Install base Python dependencies
-      run: |
-        # Install from requirements first (cached packages will be used)
-        pip install -r requirements.txt
-        # Install the package itself
-        pip install -e .
-
     # ============================================================================
     # CHECK FOR TENSORFLOW REQUIREMENT
     # ============================================================================
@@ -208,6 +200,15 @@ jobs:
           echo "requires_tensorflow=false" >> $GITHUB_OUTPUT
         fi
 
+    # Install base Python dependencies (will use pip cache if available)
+    - name: Install base Python dependencies
+      if: steps.check-tensorflow.outputs.requires_tensorflow == 'true'
+      run: |
+        # Install from requirements first (cached packages will be used)
+        pip install -r requirements.txt
+        # Install the package itself
+        pip install -e .
+        
     - name: Install TensorFlow and Keras (when required)
       if: steps.check-tensorflow.outputs.requires_tensorflow == 'true'
       shell: bash
