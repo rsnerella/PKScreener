@@ -99,13 +99,16 @@ class StockScreener:
                                 "MUTUALFUND-", "ETF-", "FOF-", "LIQUID-", "ULTRALIQUID-")
         INVALID_STOCK_NAMES = ("NIFTY", "BANKNIFTY", "FINNIFTY", "INDIAVIX")
 
-        # The optimized condition
-        if (not stock or 
-            " " in str(stock) or 
-            stock.upper().startswith(INVALID_STOCK_PREFIXES) or 
-            stock.upper() in INVALID_STOCK_NAMES):
-            # Handle invalid stock
+        if not stock:
             return None
+
+        stock_upper = stock.upper()
+
+        if (" " in stock or 
+            stock_upper in INVALID_STOCK_NAMES or
+            any(prefix in stock_upper for prefix in INVALID_STOCK_PREFIXES)):
+            return None
+        
         self.setupLogger(log_level=logLevel)
         configManager = hostRef.configManager
         self.configManager = configManager
