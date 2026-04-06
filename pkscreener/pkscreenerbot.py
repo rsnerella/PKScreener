@@ -1026,7 +1026,8 @@ def trigger_prod_scans_workflow():
             repo="PKScreener", 
             owner="pkjmesra",
             workflow_name="w7-workflow-prod-scans-trigger.yml",
-            ghp_token=github_token
+            ghp_token=github_token,
+            workflowType=""
         )
         
         if result and result.status_code == 204:
