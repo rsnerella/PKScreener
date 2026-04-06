@@ -50,7 +50,7 @@ import sys
 import threading
 import traceback
 from datetime import datetime
-from time import sleep
+from time import sleep, time
 
 # =============================================================================
 # MOCK PKG_RESOURCES FOR APSCHEDULER COMPATIBILITY
@@ -879,7 +879,7 @@ def viewSubscriptionOptions(update:Update,context:CallbackContext,sendOTP=False)
                         subscriptionModelNames = f"{subscriptionModelNames}\n₹ {str(value).ljust(6)}: {name} (Only Basic Scans are free)\n"
                     else:
                         subscriptionModelNames = f"{subscriptionModelNames}\n₹ {str(value).ljust(6)}: {name}"
-                subscriptionModelNames = f"{subscriptionModelNames}</pre>\nPlease pay to subscribe:\n1. Using UPI(India) to <a href='https://tinyurl.com/v7h3t233'>PKScreener@APL</a> or\n2. Proudly <a href='https://github.com/sponsors/pkjmesra?frequency=recurring&sponsor=pkjmesra'><b>sponsor</b></a>\nPlease send\n/check UPI_UTR_HERE_After_Making_Payment to share transaction reference number to automatically enable subscription after making payment via UPI\n. If it is not auto-enabled, please drop a message to @ItsOnlyPK on Telegram after paying to enable subscription manually."
+                subscriptionModelNames = f"{subscriptionModelNames}</pre>\nPlease pay to subscribe:\n1. Using UPI(India) to <a href='https://tinyurl.com/v7h3t233'>PKScreener@APL</a> or\n2. Proudly <a href='https://github.com/sponsors/pkjmesra?frequency=recurring&sponsor=pkjmesra&cache={int(time() / 86400)}'><b>sponsor</b></a>\nPlease send\n/check UPI_UTR_HERE_After_Making_Payment to share transaction reference number to automatically enable subscription after making payment via UPI\n. If it is not auto-enabled, please drop a message to @ItsOnlyPK on Telegram after paying to enable subscription manually."
 
                 subscriptionModelName = PKUserSusbscriptions().subscriptionValueKeyPairs[subsModel]
                 if subscriptionModelName != PKSubscriptionModel.No_Subscription.name:
@@ -956,7 +956,7 @@ def subscribeToScannerAlerts(update: Update, context: CallbackContext) -> str:
 
     requiredBalance = 40 if str(scanId).upper().startswith("P") else 31
     # upi://pay?pa=PKScreener@APL&pn=PKScreener&cu=INR
-    payWall = "Please pay to subscribe:\n1. Using UPI(India) to <a href='https://tinyurl.com/v7h3t233'>PKScreener@APL</a> or\n2. Proudly <a href='https://github.com/sponsors/pkjmesra?frequency=recurring&sponsor=pkjmesra'>sponsor</a>\nPlease use\n/check UPI_UTR_HERE_After_Making_Payment to share transaction reference number to automatically update your balance after making payment via UPI.\nAfter that you can try re-subscribing!\nIf you still face any problem, please drop a message to @ItsOnlyPK along with UTR and Scan details on Telegram after paying to enable subscription manually."
+    payWall = f"Please pay to subscribe:\n1. Using UPI(India) to <a href='https://tinyurl.com/v7h3t233'>PKScreener@APL</a> or\n2. Proudly <a href='https://github.com/sponsors/pkjmesra?frequency=recurring&sponsor=pkjmesra&cache={int(time() / 86400)}'>sponsor</a>\nPlease use\n/check UPI_UTR_HERE_After_Making_Payment to share transaction reference number to automatically update your balance after making payment via UPI.\nAfter that you can try re-subscribing!\nIf you still face any problem, please drop a message to @ItsOnlyPK along with UTR and Scan details on Telegram after paying to enable subscription manually."
     if alertUser is not None and alertUser.balance >= 0:
         # User has some balance
         if len(alertUser.scannerJobs) > 0:
@@ -1491,9 +1491,9 @@ def Level2(update: Update, context: CallbackContext) -> str:
             expectedTime = f"{'10 to 15' if '> 15' in optionChoices else '1 to 2'}"
             is_subscription_enabled = bool(int(PKEnvironment().SUBSCRIPTION_ENABLED))
             if is_subscription_enabled:
-                menuText = f"Thank you for choosing {optionChoices.replace(' >  > ','')}. You will receive the notification/results in about {expectedTime} minutes. It generally takes 1-2 minutes for NSE (2000+) stocks.\nPKScreener had been free for a long time, but owing to cost/budgeting issues, only a basic set of features will always remain free for everyone. Consider donating to help cover the basic server costs or subscribe to premium, if not subscribed yet:\nUPI (India): <a href='https://tinyurl.com/v7h3t233'>PKScreener@APL</a>\nor <a href='https://github.com/sponsors/pkjmesra?frequency=recurring&sponsor=pkjmesra'>sponsor</a>"
+                menuText = f"Thank you for choosing {optionChoices.replace(' >  > ','')}. You will receive the notification/results in about {expectedTime} minutes. It generally takes 1-2 minutes for NSE (2000+) stocks.\nPKScreener had been free for a long time, but owing to cost/budgeting issues, only a basic set of features will always remain free for everyone. Consider donating to help cover the basic server costs or subscribe to premium, if not subscribed yet:\nUPI (India): <a href='https://tinyurl.com/v7h3t233'>PKScreener@APL</a>\nor <a href='https://github.com/sponsors/pkjmesra?frequency=recurring&sponsor=pkjmesra&cache={int(time() / 86400)}'>sponsor</a>"
             else:
-                menuText = f"Thank you for choosing {optionChoices.replace(' >  > ','')}. You will receive the notification/results in about {expectedTime} minutes. It generally takes 1-2 minutes for NSE (2000+) stocks.\nPKScreener is being made available for free for a long time. We incur costs to maintain the service. Consider donating to help cover the basic server and maintenance costs:\nUPI (India): <a href='https://tinyurl.com/v7h3t233'>PKScreener@APL</a>\nor <a href='https://github.com/sponsors/pkjmesra?frequency=recurring&sponsor=pkjmesra'>sponsor</a>"
+                menuText = f"Thank you for choosing {optionChoices.replace(' >  > ','')}. You will receive the notification/results in about {expectedTime} minutes. It generally takes 1-2 minutes for NSE (2000+) stocks.\nPKScreener is being made available for free for a long time. We incur costs to maintain the service. Consider donating to help cover the basic server and maintenance costs:\nUPI (India): <a href='https://tinyurl.com/v7h3t233'>PKScreener@APL</a>\nor <a href='https://github.com/sponsors/pkjmesra?frequency=recurring&sponsor=pkjmesra&cache={int(time() / 86400)}'>sponsor</a>"
 
             reply_markup = default_markup(user=user)
             options = ":".join(selection)
@@ -1784,7 +1784,7 @@ def BBacktests(update: Update, context: CallbackContext) -> str:
         ]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    responseText = "Backtesting NOT implemented yet in this Bot!\nYou can use backtesting by downloading the software from https://github.com/pkjmesra/PKScreener/"
+    responseText = f"Backtesting NOT implemented yet in this Bot!\nYou can use backtesting by downloading the software from https://github.com/pkjmesra/PKScreener/?cache={int(time() / 86400)}"
     responseText = f"{responseText}\nClick /start if you want to restart the session."
     editMessageText(query=query,editedText=sanitiseTexts(responseText),reply_markup=default_markup(user=user))
     registerUser(user)
@@ -1822,7 +1822,7 @@ def end(update: Update, context: CallbackContext) -> str:
     """
     query = update.callback_query
     query.answer()
-    responseText = "See https://github.com/pkjmesra/PKScreener/ for more details or join https://t.me/PKScreener. \nSee you next time!"
+    responseText = f"See https://github.com/pkjmesra/PKScreener/?cache={int(time() / 86400)} for more details or join https://t.me/PKScreener. \nSee you next time!"
     responseText = f"{responseText}\nClick /start if you want to restart the session."
     editMessageText(query=query,editedText=sanitiseTexts(responseText),reply_markup=default_markup(query.from_user))
     return ConversationHandler.END
@@ -2295,7 +2295,7 @@ def sendRequestSubmitted(optionChoices, update, context):
             return
     # Get user that sent /start and log his name
     user = updateCarrier.from_user
-    menuText = f"Thank you for choosing {optionChoices}. You will receive the notification/results in about 1-2 minutes! \nConsider donating to help cover the basic server and maintenance costs:\nUPI: <a href='https://tinyurl.com/v7h3t233'>PKScreener@APL</a> \nor <a href='https://github.com/sponsors/pkjmesra?frequency=recurring&sponsor=pkjmesra'>sponsor</a>"
+    menuText = f"Thank you for choosing {optionChoices}. You will receive the notification/results in about 1-2 minutes! \nConsider donating to help cover the basic server and maintenance costs:\nUPI: <a href='https://tinyurl.com/v7h3t233'>PKScreener@APL</a> \nor <a href='https://github.com/sponsors/pkjmesra?frequency=recurring&sponsor=pkjmesra&cache={int(time() / 86400)}'>sponsor</a>"
     update.message.reply_text(sanitiseTexts(menuText),reply_markup=default_markup(user=user),parse_mode="HTML")
     # help_command(update=update, context=context)
     shareUpdateWithChannel(
