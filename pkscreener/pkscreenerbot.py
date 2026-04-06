@@ -1068,7 +1068,7 @@ def scheduled_workflow_trigger():
                 if _trigger_stop_event.is_set():
                     break
                 # Sleep for an hour before checking again (no need to check frequently)
-                time.sleep(3600)
+                sleep(3600)
                 continue
             
             # Determine sleep interval based on time
@@ -1111,11 +1111,11 @@ def scheduled_workflow_trigger():
             for _ in range(sleep_interval // 10):
                 if _trigger_stop_event.is_set():
                     break
-                time.sleep(10)
+                sleep(10)
                 
         except Exception as e:
             logger.error(f"Error in scheduled workflow trigger: {e}")
-            time.sleep(60)  # Sleep for a minute on error
+            sleep(60)  # Sleep for a minute on error
     
     logger.info("🛑 Scheduled workflow trigger thread stopped")
 
