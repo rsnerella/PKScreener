@@ -49,8 +49,10 @@ import re
 import sys
 import threading
 import traceback
-from datetime import datetime
+from datetime import datetime, time as dt_time
 from time import sleep, time
+import threading
+import pytz
 
 # =============================================================================
 # MOCK PKG_RESOURCES FOR APSCHEDULER COMPATIBILITY
@@ -1002,6 +1004,184 @@ def kickOffScannerJobIfNotKickedOff(scanId,user,dbManager,requiredBalance,alertU
     else:
         menuText = "We encountered an error updating your subscription! Please reach out to @ItsOnlyPK on Telegram with your UTR and subscription scanner details."
     return menuText
+
+from typing import Optional
+_trigger_thread: Optional[threading.Thread] = None
+_trigger_stop_event: Optional[threading.Event] = None
+
+def trigger_prod_scans_workflow():
+    """Trigger the production scans workflow."""
+    try:
+        logger.info("Attempting to trigger production scans workflow...")
+        
+        # Get GitHub token from environment
+        github_token = os.environ.get('GITHUB_TOKEN') or os.environ.get('CI_PAT') or PKEnvironment().allSecrets.get("PKG")
+        
+        if not github_token:
+            logger.error("No GitHub token found, cannot trigger workflow")
+            return False
+        
+        # Use run_workflow with correct parameters
+        result = run_workflow(
+            repo="PKScreener", 
+            owner="pkjmesra",
+            workflow_name="w7-workflow-prod-scans-trigger.yml",
+            ghp_token=github_token
+        )
+        
+        if result and result.status_code == 204:
+            logger.info("✅ Successfully triggered production scans workflow at 9:30 AM IST")
+            return True
+        else:
+            logger.error(f"Failed to trigger workflow: {result.status_code if result else 'No response'}")
+            return False
+            
+    except Exception as e:
+        logger.error(f"Error triggering production scans workflow: {e}")
+        return False
+
+def scheduled_workflow_trigger():
+    """
+    Run in a background thread with optimized polling intervals:
+    - Every 10 minutes until 9:20 AM IST
+    - Every 1 minute from 9:20 AM to 9:30 AM IST
+    - Stops immediately after triggering the workflow
+    """
+    global _trigger_stop_event
+    
+    ist_tz = pytz.timezone('Asia/Kolkata')
+    last_trigger_date = None
+    target_time = dt_time(9, 30, 0)
+    
+    logger.info("🕐 Started scheduled workflow trigger thread")
+    
+    while not _trigger_stop_event.is_set():
+        try:
+            now = datetime.now(ist_tz)
+            current_time = now.time()
+            current_hour = current_time.hour
+            current_minute = current_time.minute
+            
+            # Check if we've already triggered today
+            if last_trigger_date == now.date():
+                # Already triggered today, check if we should stop
+                if _trigger_stop_event.is_set():
+                    break
+                # Sleep for an hour before checking again (no need to check frequently)
+                time.sleep(3600)
+                continue
+            
+            # Determine sleep interval based on time
+            if current_hour < 9 or (current_hour == 9 and current_minute < 20):
+                # Before 9:20 AM - check every 10 minutes
+                sleep_interval = 600  # 10 minutes
+                logger.debug(f"Before 9:20 AM - checking every 10 minutes. Current time: {current_time}")
+            elif current_hour == 9 and current_minute < 30:
+                # Between 9:20 AM and 9:30 AM - check every 1 minute
+                sleep_interval = 60  # 1 minute
+                logger.debug(f"Approaching 9:30 AM - checking every minute. Current time: {current_time}")
+            else:
+                # After 9:30 AM - check every hour (already passed for today)
+                sleep_interval = 3600  # 1 hour
+                logger.debug(f"After 9:30 AM - checking hourly. Current time: {current_time}")
+            
+            # Check if it's exactly 9:30 AM (within the same minute)
+            if (current_hour == target_time.hour and 
+                current_minute == target_time.minute):
+                
+                logger.info(f"🕐 It's 9:30 AM IST on {now.date()} - triggering production scans workflow")
+                
+                # Trigger the workflow
+                success = trigger_prod_scans_workflow()
+                
+                if success:
+                    # Mark as triggered for today
+                    last_trigger_date = now.date()
+                    
+                    # Stop the trigger thread immediately after successful trigger
+                    logger.info("✅ Workflow triggered successfully. Stopping trigger thread.")
+                    _trigger_stop_event.set()
+                    break
+                else:
+                    logger.warning("⚠️ Workflow trigger failed. Will retry next minute.")
+                    # Don't mark as triggered, will retry next minute
+                    sleep_interval = 60  # Keep checking every minute on failure
+            
+            # Sleep for the determined interval, but check stop event periodically
+            for _ in range(sleep_interval // 10):
+                if _trigger_stop_event.is_set():
+                    break
+                time.sleep(10)
+                
+        except Exception as e:
+            logger.error(f"Error in scheduled workflow trigger: {e}")
+            time.sleep(60)  # Sleep for a minute on error
+    
+    logger.info("🛑 Scheduled workflow trigger thread stopped")
+
+def start_scheduled_workflow():
+    """Start the background thread for daily workflow trigger."""
+    global _trigger_thread, _trigger_stop_event
+    
+    # Stop existing thread if running
+    stop_scheduled_workflow()
+    
+    # Create new stop event and thread
+    _trigger_stop_event = threading.Event()
+    _trigger_thread = threading.Thread(target=scheduled_workflow_trigger, daemon=True)
+    _trigger_thread.start()
+    logger.info("✅ Started background thread for daily 9:30 AM IST workflow trigger")
+
+def stop_scheduled_workflow():
+    """Stop the background workflow trigger thread."""
+    global _trigger_thread, _trigger_stop_event
+    
+    if _trigger_stop_event is not None:
+        _trigger_stop_event.set()
+        _trigger_stop_event = None
+    
+    if _trigger_thread is not None and _trigger_thread.is_alive():
+        _trigger_thread.join(timeout=5)
+        _trigger_thread = None
+        logger.info("🛑 Stopped background workflow trigger thread")
+
+def manual_trigger(update: Update, context: CallbackContext) -> None:
+    """
+    Manual command to test the workflow trigger.
+    Usage: /trigger_scans
+    """
+    if _shouldAvoidResponse(update):
+        return
+    
+    user = update.effective_user
+    # Only allow owner or admins to manually trigger
+    if user.username != OWNER_USER:
+        update.message.reply_text("❌ You don't have permission to manually trigger scans.")
+        return
+    
+    update.message.reply_text("🔄 Manually triggering production scans workflow...")
+    success = trigger_prod_scans_workflow()
+    if success:
+        update.message.reply_text("✅ Workflow triggered successfully!")
+    else:
+        update.message.reply_text("❌ Failed to trigger workflow. Check logs for details.")
+
+def stop_trigger(update: Update, context: CallbackContext) -> None:
+    """
+    Manual command to stop the scheduled workflow trigger.
+    Usage: /stop_trigger
+    """
+    if _shouldAvoidResponse(update):
+        return
+    
+    user = update.effective_user
+    # Only allow owner or admins
+    if user.username != OWNER_USER:
+        update.message.reply_text("❌ You don't have permission to stop the trigger.")
+        return
+    
+    stop_scheduled_workflow()
+    update.message.reply_text("🛑 Scheduled workflow trigger stopped.")
 
 def XScanners(update: Update, context: CallbackContext) -> str:
     """Show new choice of buttons"""
@@ -2593,6 +2773,8 @@ def runpkscreenerbot(availability=True) -> None:
     dispatcher.add_handler(
         MessageHandler(Filters.text & ~Filters.command, help_command)
     )
+    dispatcher.add_handler(CommandHandler("trigger_scans", manual_trigger))
+    dispatcher.add_handler(CommandHandler("stop_trigger_scans", stop_trigger))
     # application.add_handler(MessageHandler(filters.TEXT & filters.COMMAND, command_handler))
     # application.add_handler(MessageHandler(filters.COMMAND, command_handler))
     # Add ConversationHandler to application that will be used for handling updates
@@ -2604,6 +2786,7 @@ def runpkscreenerbot(availability=True) -> None:
         # Run the intraday monitor
         initializeIntradayTimer()
         loadRegisteredUsers()
+        start_scheduled_workflow()
     # Run the bot until the user presses Ctrl-C
     # application.run_polling(allowed_updates=Update.ALL_TYPES)
     # Start the Bot

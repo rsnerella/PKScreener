@@ -40,9 +40,9 @@ on:
         type: string
         default: '3.12'
 
-  schedule:
-    - cron: '15 3 * * 0-6'
-    - cron: '53 9 * * 0-6'
+  # schedule:
+  #   - cron: '15 3 * * 0-6'
+  #   - cron: '53 9 * * 0-6'
 
 jobs:
 
