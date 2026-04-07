@@ -42,7 +42,7 @@ def run_workflow(command=None, user=None, options=None, workflowType="B",repo=No
     data = (
             '{"ref":"'
             + branch
-            + '","inputs":{"branch-name":"main","cliOptions":""}}'
+            + '","inputs":{"targetPythonVersion":"3.12","name":"Triggered by PTB"}}'
         )
     if options is None:
         options = ""
