@@ -39,12 +39,11 @@ def run_workflow(command=None, user=None, options=None, workflowType="B",repo=No
         repo = os.popen('git ls-remote --get-url origin | cut -d/ -f5').read().replace(".git","").replace("\n","")
     if branch is None:
         branch = "main"
-    if data is None:
-        data = (
-                '{"ref":"'
-                + branch
-                + '","inputs":{"branch-name":"main","cliOptions":""}}'
-            )
+    data = (
+            '{"ref":"'
+            + branch
+            + '","inputs":{"branch-name":"main","cliOptions":""}}'
+        )
     if options is None:
         options = ""
     timestamp = int(PKDateUtilities.currentDateTimestamp())
