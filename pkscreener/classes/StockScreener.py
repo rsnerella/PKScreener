@@ -95,7 +95,7 @@ class StockScreener:
             hostRef is not None
         ), "hostRef argument must not be None. It should be an instance of PKMultiProcessorClient"
         # Define invalid patterns once (outside your loop/function)
-        INVALID_STOCK_PREFIXES = ("BOND-", "DEBT-", "PREF-", "NCD-", "PSU-", 
+        INVALID_STOCK_PREFIXES = ("NIFTY", "BOND-", "DEBT-", "PREF-", "NCD-", "PSU-", 
                                 "MUTUALFUND-", "ETF-", "FOF-", "LIQUID-", "ULTRALIQUID-")
         INVALID_STOCK_NAMES = ("NIFTY", "BANKNIFTY", "FINNIFTY", "INDIAVIX")
 
@@ -106,6 +106,7 @@ class StockScreener:
 
         if (" " in stock or 
             stock_upper in INVALID_STOCK_NAMES or
+            any(name in stock_upper for name in INVALID_STOCK_NAMES) or
             any(prefix in stock_upper for prefix in INVALID_STOCK_PREFIXES)):
             return None
         

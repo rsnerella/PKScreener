@@ -472,7 +472,7 @@ class PKAssetsManager:
                 default_logger().info(f"Applied fresh tick data to {updated_count} symbols")
                 OutputControls().printOutput(
                     colorText.GREEN
-                    + f"  [+] Applied fresh tick data to {updated_count} stocks."
+                    + f"\n  [+] Applied fresh tick data to {updated_count} stocks."
                     + colorText.END
                 )
             
