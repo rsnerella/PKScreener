@@ -2567,7 +2567,7 @@ def printNotifySaveScreenedResults(
     # BUILD THE REPORT TITLE WITH COUNTS
     if userPassedArgs and userPassedArgs.options and "|" in userPassedArgs.options:
         # For piped scans, use the menuChoiceHierarchy which already has counts
-        reportTitle = menuChoiceHierarchy
+        reportTitle = menuChoiceHierarchy.strip()
         # Also update the pipedtitle to show the final pipe results
         if screenResults is not None and len(screenResults) > 0:
             # Store the count for the last component
@@ -2580,13 +2580,13 @@ def printNotifySaveScreenedResults(
                 userPassedArgs.piped_results_counts.append(final_count)
             # Update the hierarchy to show the final count
             updateMenuChoiceHierarchy()
-            reportTitle = menuChoiceHierarchy
+            reportTitle = menuChoiceHierarchy.strip()
     else:
         # For single scans, add count to the title
-        reportTitle = f"{menuChoiceHierarchy}[{result_count}]"
+        reportTitle = f"{menuChoiceHierarchy.strip()}[{result_count}]"
     
     reportTitle = f"{userPassedArgs.pipedtitle}|" if userPassedArgs is not None and userPassedArgs.pipedtitle is not None else reportTitle
-    last_scan_name = f"{(menuChoiceHierarchy.split(' > ')[-1]+'['+str(final_count)+']') if menuChoiceHierarchy is not None and len(menuChoiceHierarchy.split(' > ')) > 1 else ''}"
+    last_scan_name = f"{(str(menuChoiceHierarchy.split(' > ')[-1]).strip()+'['+str(final_count)+']') if menuChoiceHierarchy is not None and len(menuChoiceHierarchy.split(' > ')) > 1 else ''}"
     reportTitle = reportTitle.replace(last_scan_name,'')
     reportTitle = f"{runOptionName} {'|' if len(str(runOptionName)) > 0 else ''}{reportTitle}{last_scan_name}"
     OutputControls().printOutput(
