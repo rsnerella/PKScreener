@@ -2199,7 +2199,7 @@ def updateMenuChoiceHierarchy():
             if level1_key in INDICES_MAP and len(part_info) == len(userPassedArgs.all_scans):
                 menuChoiceHierarchy = f"{INDICES_MAP[level1_key].strip()}: {menuChoiceHierarchy}"
             elif level1_key in level1_X_MenuDict:
-                level1_text = level1_X_MenuDict[level1_key].split('(')[0].strip()
+                level1_text = level1_X_MenuDict[level1_key] #.split('(')[0].strip()
                 menuChoiceHierarchy = f"{menuChoiceHierarchy} for {level1_text}"
         
     else:
@@ -2209,7 +2209,7 @@ def updateMenuChoiceHierarchy():
         # Level 0 - Top level menu
         if selectedChoice.get("0") and selectedChoice["0"] not in ["", "0"]:
             level0_text = level0MenuDict.get(selectedChoice["0"], selectedChoice["0"])
-            level0_text = level0_text.split('(')[0].strip()
+            level0_text = level0_text #.split('(')[0].strip()
             hierarchy_parts.append(level0_text)
         
         # Level 1 - Index/Sector selection
@@ -2221,7 +2221,7 @@ def updateMenuChoiceHierarchy():
                 level1_text = INDICES_MAP[level1_key]
             else:
                 level1_text = level1_X_MenuDict.get(level1_key, level1_key)
-            level1_text = level1_text.split('(')[0].strip()
+            level1_text = level1_text #.split('(')[0].strip()
             hierarchy_parts.append(level1_text)
         
         # Level 2 - Scan type
@@ -2229,11 +2229,11 @@ def updateMenuChoiceHierarchy():
             level2_key = str(selectedChoice["2"])
             if level2_key in level2_X_MenuDict:
                 level2_text = level2_X_MenuDict[level2_key]
-                level2_text = level2_text.split('(')[0].strip()
+                level2_text = level2_text #.split('(')[0].strip()
                 hierarchy_parts.append(level2_text)
             elif hasattr(m2, 'menuDict') and level2_key in m2.menuDict:
                 level2_text = m2.menuDict[level2_key].menuText
-                level2_text = level2_text.split('(')[0].strip()
+                level2_text = level2_text #.split('(')[0].strip()
                 hierarchy_parts.append(level2_text)
         
         # Level 3 - Sub-option (if exists)
@@ -2269,7 +2269,7 @@ def updateMenuChoiceHierarchy():
                         level3_text = level4_X_Lorenzian_MenuDict[level3_key]
             
             if level3_text:
-                level3_text = level3_text.split('(')[0].strip()
+                level3_text = level3_text #.split('(')[0].strip()
                 hierarchy_parts.append(level3_text)
         
         # Level 4 - Further sub-option (if exists)
@@ -2301,7 +2301,7 @@ def updateMenuChoiceHierarchy():
                         level4_text = level4_X_Lorenzian_MenuDict[level4_key]
             
             if level4_text:
-                level4_text = level4_text.split('(')[0].strip()
+                level4_text = level4_text #.split('(')[0].strip()
                 hierarchy_parts.append(level4_text)
         
         # Join with " > " separator
@@ -2583,10 +2583,12 @@ def printNotifySaveScreenedResults(
             reportTitle = menuChoiceHierarchy
     else:
         # For single scans, add count to the title
-        reportTitle = f"{runOptionName} {'|' if len(str(runOptionName)) > 0 else ''} {menuChoiceHierarchy}[{result_count}]"
+        reportTitle = f"{menuChoiceHierarchy}[{result_count}]"
     
     reportTitle = f"{userPassedArgs.pipedtitle}|" if userPassedArgs is not None and userPassedArgs.pipedtitle is not None else reportTitle
-    reportTitle = f"{reportTitle}{(menuChoiceHierarchy.split(' > ')[-1]+'['+str(final_count)+']') if menuChoiceHierarchy is not None and len(menuChoiceHierarchy.split(' > ')) > 1 else reportTitle}"
+    last_scan_name = f"{(menuChoiceHierarchy.split(' > ')[-1]+'['+str(final_count)+']') if menuChoiceHierarchy is not None and len(menuChoiceHierarchy.split(' > ')) > 1 else ''}"
+    reportTitle = reportTitle.replace(last_scan_name,'')
+    reportTitle = f"{runOptionName} {'|' if len(str(runOptionName)) > 0 else ''}{reportTitle}{last_scan_name}"
     OutputControls().printOutput(
         colorText.FAIL
         + f"  [+] You chose: {reportTitle}"
