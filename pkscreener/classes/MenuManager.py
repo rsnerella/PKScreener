@@ -554,7 +554,8 @@ class MenuManager:
         
         if len(run_option_name) >= 5:
             PKAnalyticsService().send_event(run_option_name)
-            
+        
+        ConsoleUtility.PKConsoleTools.clearScreen(forceTop=True)
         OutputControls().printOutput(
             colorText.FAIL
             + f"  [+] You chose: {report_title} "
@@ -1433,7 +1434,7 @@ class TelegramNotifier:
                     if caption is not None:
                         caption = f"{caption.replace('&','n')}"
                     send_photo(photo_file_path, (caption if len(caption) <= 1024 else ""), userID=user)
-                    sleep(2)
+                    # sleep(2)
                 except Exception as e:
                     default_logger().debug(e, exc_info=True)
                     
@@ -1442,7 +1443,7 @@ class TelegramNotifier:
                     if caption is not None and isinstance(caption, str):
                         caption = f"{caption.replace('&','n')}"
                     send_document(document_file_path, (caption if len(caption) <= 1024 else ""), userID=user)
-                    sleep(2)
+                    # sleep(2)
                 except Exception as e:
                     default_logger().debug(e, exc_info=True)
         else:

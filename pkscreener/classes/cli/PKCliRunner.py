@@ -522,7 +522,8 @@ class CliConfigManager:
                         f"[+]{colorText.GREEN} and accept Terms Of Service {colorText.END}({tos_link}){colorText.GREEN} of PKScreener. {colorText.END}\n"
                         f"[+] {colorText.WARN}If that is not the case, you MUST immediately terminate PKScreener by pressing Ctrl+C now!{colorText.END}"
                     )
-                    sleep(2)
+                    if "RUNNER" not in os.environ.keys():
+                        sleep(2)
                     break
         
         if (not user_acceptance and 

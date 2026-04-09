@@ -2589,6 +2589,7 @@ def printNotifySaveScreenedResults(
     last_scan_name = f"{(str(menuChoiceHierarchy.split(' > ')[-1]).strip()+'['+str(final_count)+']') if menuChoiceHierarchy is not None and len(menuChoiceHierarchy.split(' > ')) > 1 else ''}"
     reportTitle = reportTitle.replace(last_scan_name,'')
     reportTitle = f"{runOptionName} {'|' if len(str(runOptionName)) > 0 else ''}{reportTitle}{last_scan_name}"
+    ConsoleUtility.PKConsoleTools.clearScreen(forceTop=True)
     OutputControls().printOutput(
         colorText.FAIL
         + f"  [+] You chose: {reportTitle}"
