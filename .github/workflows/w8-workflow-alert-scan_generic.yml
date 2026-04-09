@@ -484,7 +484,7 @@ jobs:
         ALERT_TRIGGER: ${{ inputs.alertTrigger || 'N' }}
       run: |
         ${{ inputs.prerequisites }}
-        pip install libsql
+        # pip install libsql
         /home/runner/work/PKScreener/PKScreener/pkscreenercli_x64.bin ${{ inputs.params }}
         ${{ inputs.postrun }}
 
