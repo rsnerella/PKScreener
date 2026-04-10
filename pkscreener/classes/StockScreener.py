@@ -1009,25 +1009,7 @@ class StockScreener:
         return fullData,processedData,data
 
     def getRelevantDataForStock(self, totalSymbols, shouldCache, stock, downloadOnly, printCounter, backtestDuration, hostRef,objectDictionary, configManager, fetcher, period, duration, testData=None,exchangeName="INDIA"):
-        # #region agent log
-        # import json
-        # log_path = os.path.join(Archiver.get_user_data_dir(), "pkscreener-logs.txt")
-        # try:
-        #     with open(log_path, 'a') as f:
-        #         f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"StockScreener.py:getRelevantDataForStock:996","message":"getRelevantDataForStock entry","data":{"stock":stock},"timestamp":int(__import__('time').time()*1000)}) + '\n')
-        # except: pass
-        # #endregion
         hostData = objectDictionary.get(stock) if (objectDictionary is not None and len(objectDictionary) > 0) else None
-        # #region agent log
-        # try:
-        #     hostData_type = type(hostData).__name__ if hostData is not None else None
-        #     hostData_keys = list(hostData.keys())[:3] if hostData and isinstance(hostData, dict) else None
-        #     hostData_index = hostData.get('index', [])[-1] if hostData and isinstance(hostData, dict) and 'index' in hostData and len(hostData.get('index', [])) > 0 else None
-        #     hostData_index_first = hostData.get('index', [])[0] if hostData and isinstance(hostData, dict) and 'index' in hostData and len(hostData.get('index', [])) > 0 else None
-        #     with open(log_path, 'a') as f:
-        #         f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"StockScreener.py:getRelevantDataForStock:1005","message":"hostData retrieved from objectDictionary","data":{"stock":stock,"hostData_type":hostData_type,"hostData_keys":hostData_keys,"hostData_index_last":str(hostData_index) if hostData_index else None,"hostData_index_first":str(hostData_index_first) if hostData_index_first else None,"hostData_index_len":len(hostData.get('index', [])) if hostData and isinstance(hostData, dict) and 'index' in hostData else 0},"timestamp":int(__import__('time').time()*1000)}) + '\n')
-        # except: pass
-        # #endregion
         data = None
         hostDataLength = 0 if hostData is None else (0 if "data" not in hostData.keys() else len(hostData["data"]))
         start = None
@@ -1070,17 +1052,6 @@ class StockScreener:
                 #         exchangeSuffix=".NS" if exchangeName == "INDIA" else "",
                 #         printCounter=printCounter
                 #     )
-                # #region agent log
-                # import json
-                # log_path = os.path.join(Archiver.get_user_data_dir(),"pkscreener-logs.txt")
-                # try:
-                #     hostData_type = type(hostData).__name__ if hostData is not None else None
-                #     hostData_keys = list(hostData.keys())[:3] if hostData and isinstance(hostData, dict) else None
-                #     hostData_index = hostData.get('index', [])[-1] if hostData and isinstance(hostData, dict) and 'index' in hostData else None
-                #     with open(log_path, 'a') as f:
-                #         f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"StockScreener.py:getRelevantDataForStock:1040","message":"hostData before DataFrame creation","data":{"stock":stock,"hostData_type":hostData_type,"hostData_keys":hostData_keys,"hostData_index_last":str(hostData_index) if hostData_index else None},"timestamp":int(__import__('time').time()*1000)}) + '\n')
-                # except: pass
-                # #endregion
                 if hostData is not None and data is not None:
                     # During the market trading hours, we don't want to go for MFI/FV value fetching
                     # So let's copy the old saved ones.
@@ -1161,14 +1132,6 @@ class StockScreener:
             # Sort by index in descending order to ensure latest date is at the beginning (index[0])
             # This is the expected format for validation functions like validate15MinutePriceVolumeBreakout
             data = data.sort_index(ascending=False)
-            # #region agent log
-            # import json
-            # log_path = os.path.join(Archiver.get_user_data_dir(),"pkscreener-logs.txt")
-            # try:
-            #     with open(log_path, 'a') as f:
-            #         f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"StockScreener.py:getRelevantDataForStock:1119","message":"DataFrame sorted, checking index[0]","data":{"stock":stock,"index_0":str(data.index[0]) if not data.empty else None,"index_len":len(data.index) if not data.empty else 0,"index_first_3":[str(x) for x in list(data.index[:3])] if not data.empty and len(data.index) >= 3 else None},"timestamp":int(__import__('time').time()*1000)}) + '\n')
-            # except: pass
-            # #endregion
             # Log date range for debugging (only for first few stocks to avoid spam)
             if hasattr(hostRef, '_data_date_logged_count'):
                 hostRef._data_date_logged_count = getattr(hostRef, '_data_date_logged_count', 0) + 1

@@ -3684,13 +3684,6 @@ class ScreeningStatistics:
                     # Fallback to recent if data is empty
                     latest_date_index = recent.index[0] if not recent.empty else None
                 
-                # #region agent log
-                # import json
-                # log_path = os.path.join(Archiver.get_user_data_dir(), "pkscreener-logs.txt")
-                # with open(log_path, 'a') as f:
-                #     f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"E","location":"ScreeningStatistics.py:validateLTP:3687","message":"Setting Time column from latest_date_index","data":{"latest_date_index":str(latest_date_index) if latest_date_index else None,"data_empty":data.empty,"data_index_0":str(data.index[0]) if not data.empty else None,"data_index_len":len(data.index) if not data.empty else 0},"timestamp":int(__import__('time').time()*1000)}) + '\n')
-                # #endregion
-                
                 if latest_date_index is not None:
                     dateTimePart = str(latest_date_index).split(" ")
                     if len(dateTimePart) == 1:

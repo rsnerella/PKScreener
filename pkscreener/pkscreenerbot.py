@@ -1044,15 +1044,15 @@ def trigger_prod_scans_workflow():
 def scheduled_workflow_trigger():
     """
     Run in a background thread with optimized polling intervals:
-    - Every 10 minutes until 9:20 AM IST
-    - Every 1 minute from 9:20 AM to 9:30 AM IST
+    - Every 10 minutes until 9:30 AM IST
+    - Every 1 minute from 9:30 AM to 9:40 AM IST
     - Stops immediately after triggering the workflow
     """
     global _trigger_stop_event
     
     ist_tz = pytz.timezone('Asia/Kolkata')
     last_trigger_date = None
-    target_time = dt_time(9, 30, 0)
+    target_time = dt_time(9, 40, 0)
     
     logger.info("🕐 Started scheduled workflow trigger thread")
     
@@ -1073,24 +1073,24 @@ def scheduled_workflow_trigger():
                 continue
             
             # Determine sleep interval based on time
-            if current_hour < 9 or (current_hour == 9 and current_minute < 20):
-                # Before 9:20 AM - check every 10 minutes
+            if current_hour < 9 or (current_hour == 9 and current_minute < 30):
+                # Before 9:30 AM - check every 10 minutes
                 sleep_interval = 600  # 10 minutes
-                logger.debug(f"Before 9:20 AM - checking every 10 minutes. Current time: {current_time}")
-            elif current_hour == 9 and current_minute < 30:
-                # Between 9:20 AM and 9:30 AM - check every 1 minute
+                logger.debug(f"Before 9:30 AM - checking every 10 minutes. Current time: {current_time}")
+            elif current_hour == 9 and current_minute < 40:
+                # Between 9:30 AM and 9:40 AM - check every 1 minute
                 sleep_interval = 60  # 1 minute
-                logger.debug(f"Approaching 9:30 AM - checking every minute. Current time: {current_time}")
+                logger.debug(f"Approaching 9:40 AM - checking every minute. Current time: {current_time}")
             else:
-                # After 9:30 AM - check every hour (already passed for today)
+                # After 9:40 AM - check every hour (already passed for today)
                 sleep_interval = 3600  # 1 hour
-                logger.debug(f"After 9:30 AM - checking hourly. Current time: {current_time}")
+                logger.debug(f"After 9:40 AM - checking hourly. Current time: {current_time}")
             
-            # Check if it's exactly 9:30 AM (within the same minute)
+            # Check if it's exactly 9:40 AM (within the same minute)
             if (current_hour == target_time.hour and 
                 current_minute == target_time.minute):
                 
-                logger.info(f"🕐 It's 9:30 AM IST on {now.date()} - triggering production scans workflow")
+                logger.info(f"🕐 It's 9:40 AM IST on {now.date()} - triggering production scans workflow")
                 
                 # Trigger the workflow
                 success = trigger_prod_scans_workflow()

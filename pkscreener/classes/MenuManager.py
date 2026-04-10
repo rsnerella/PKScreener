@@ -779,14 +779,6 @@ class ScanExecutor:
     def run_scanners(self, menu_option, items, tasks_queue, results_queue, num_stocks,
                     backtest_period, iterations, consumers, screen_results, save_results,
                     backtest_df, testing=False):
-        # #region agent log
-        # import json
-        # log_path = os.path.join(Archiver.get_user_data_dir(), "pkscreener-logs.txt")
-        # try:
-        #     with open(log_path, 'a') as f:
-        #         f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"ALL","location":"MenuManager.py:run_scanners:778","message":"run_scanners entry - scan starting","data":{"menu_option":menu_option,"num_stocks":num_stocks},"timestamp":int(__import__('time').time()*1000)}) + '\n')
-        # except: pass
-        # #endregion
         """
         Execute scanning operations with the given parameters.
         
