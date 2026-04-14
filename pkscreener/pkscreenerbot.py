@@ -53,6 +53,7 @@ from datetime import datetime, time as dt_time
 from time import sleep, time
 import threading
 import pytz
+import telegram
 
 # =============================================================================
 # MOCK PKG_RESOURCES FOR APSCHEDULER COMPATIBILITY
@@ -454,6 +455,7 @@ def matchUTR(update: Update, context: CallbackContext) -> str:
             updateCarrier = update.callback_query
         if update.message is not None:
             updateCarrier = update.message
+            updateCarrier.reply_chat_action(telegram.ChatAction.TYPING)
         if updateCarrier is None:
             return
     # Get user that sent /start and log his name
@@ -504,6 +506,8 @@ def editMessageText(query,editedText,reply_markup):
         query.edit_message_text(text=editedText, reply_markup=reply_markup,parse_mode="HTML")
 
 def otp(update: Update, context: CallbackContext) -> str:
+    if update.message is not None:
+        update.message.reply_chat_action(telegram.ChatAction.TYPING)
     viewSubscriptionOptions(update,context,sendOTP=True)
     return START_ROUTES
     
@@ -518,6 +522,7 @@ def start(update: Update, context: CallbackContext, updatedResults=None, monitor
             updateCarrier = update.callback_query
         if update.message is not None:
             updateCarrier = update.message
+            updateCarrier.reply_chat_action(telegram.ChatAction.TYPING)
         if updateCarrier is None:
             return
     # Get user that sent /start and log his name
@@ -657,6 +662,11 @@ def launchIntradayMonitor():
 def XDevModeHandler(update: Update, context: CallbackContext) -> str:
     """Show new choice of buttons"""
     query = update.callback_query
+    if query is not None:
+        try:
+            query.answer(text="Processing your request...", show_alert=False)
+        except Exception as e:
+            logger.error(f"Error answering callback query: {e}")
     data = str(query.data).upper().replace("CX", "X").replace("CB", "B").replace("CG", "G").replace("CMI", "MI").replace("CDV","DV")
     if data[0:2] not in TOP_LEVEL_SCANNER_MENUS:
         return start(update, context)
@@ -800,6 +810,12 @@ def cancelAlertSubscription(update:Update,context:CallbackContext):
             return
     # Get user that sent /start and log his name
     user = updateCarrier.from_user
+    query = update.callback_query if update.callback_query is not None else None
+    if query is not None:
+        try:
+            query.answer(text="Processing your request...", show_alert=False)
+        except Exception as e:
+            logger.error(f"Error answering callback query: {e}")
     scanId = str(updateCarrier.data).upper().replace("CAN_", "")
     logger.info("User %s started the conversation.", user.first_name)
     if not bot_available:
@@ -1167,7 +1183,17 @@ def manual_trigger(update: Update, context: CallbackContext) -> None:
     """
     if _shouldAvoidResponse(update):
         return
-    
+    updateCarrier = None
+    if update is None:
+        return
+    else:
+        if update.callback_query is not None:
+            updateCarrier = update.callback_query
+        if update.message is not None:
+            updateCarrier = update.message
+            update.message.reply_chat_action(telegram.ChatAction.TYPING)
+        if updateCarrier is None:
+            return
     user = update.effective_user
     # Only allow owner or admins to manually trigger
     if user.username != OWNER_USER:
@@ -1188,7 +1214,17 @@ def stop_trigger(update: Update, context: CallbackContext) -> None:
     """
     if _shouldAvoidResponse(update):
         return
-    
+    updateCarrier = None
+    if update is None:
+        return
+    else:
+        if update.callback_query is not None:
+            updateCarrier = update.callback_query
+        if update.message is not None:
+            updateCarrier = update.message
+            update.message.reply_chat_action(telegram.ChatAction.TYPING)
+        if updateCarrier is None:
+            return
     user = update.effective_user
     # Only allow owner or admins
     if user.username != OWNER_USER:
@@ -2541,6 +2577,7 @@ def help_command(update: Update, context: CallbackContext) -> None:
             updateCarrier = update.callback_query
         if update.message is not None:
             updateCarrier = update.message
+            update.message.reply_chat_action(telegram.ChatAction.TYPING)
         if updateCarrier is None:
             return
     # Get user that sent /start and log his name
