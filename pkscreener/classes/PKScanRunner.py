@@ -352,10 +352,10 @@ class PKScanRunner:
         exists, cache_file = AssetsManager.PKAssetsManager.afterMarketStockDataExists(intraday=PKScanRunner.configManager.isIntradayConfig())
         sec_cache_file = cache_file if "intraday_" in cache_file else f"intraday_{cache_file}"
         # Get RS rating stock value of the index
-        from pkscreener.classes.Fetcher import screenerStockDataFetcher
+        # from pkscreener.classes.Fetcher import screenerStockDataFetcher
         # nsei_df = screenerStockDataFetcher().fetchStockData(PKScanRunner.configManager.baseIndex,PKScanRunner.configManager.period,PKScanRunner.configManager.duration,None,0,0,0,exchangeSuffix="",printCounter=False)
         rs_score_index = -1
-        PKScanRunner.configManager.getConfig(parser)
+        # PKScanRunner.configManager.getConfig(parser)
         # if nsei_df is not None:
         #     rs_score_index = scr.calc_relative_strength(nsei_df[::-1])
         consumers = [

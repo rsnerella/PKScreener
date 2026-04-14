@@ -184,7 +184,7 @@ class tools:
                 pass
 
     @Halo(text='', spinner='dots')
-    def tryFetchFromServer(cache_file,repoOwner="pkjmesra",repoName="PKScreener",directory="results/Data",hideOutput=False,branchName="refs/heads/actions-data-download"):
+    def tryFetchFromServer(cache_file,repoOwner="pkjmesra",repoName="PKScreener",directory="results/Data",hideOutput=False,branchName="refs/heads/actions-data-download", no_cache=False):
         if not hideOutput:
             OutputControls().printOutput(
                         colorText.FAIL
@@ -196,10 +196,9 @@ class tools:
                     + f"  [+] Downloading {colorText.END}{colorText.FAIL}{'Intraday' if configManager.isIntradayConfig() else 'Daily'}{colorText.END}{colorText.GREEN} cache from server ({'Primary' if repoOwner=='pkjmesra' else 'Secondary'}) for faster processing, Please Wait.."
                     + colorText.END
                 )
-        cache_url = (
-                f"https://raw.githubusercontent.com/{repoOwner}/{repoName}/{branchName}/{directory}/"
-                + cache_file  # .split(os.sep)[-1]
-            )
+        # Build URL with cache buster if no_cache is True
+        cache_buster = f"?t={int(time.time())}" if no_cache else ""
+        cache_url = f"https://raw.githubusercontent.com/{repoOwner}/{repoName}/{branchName}/{directory}/{cache_file}{cache_buster}"
         headers = {
                     'authority': 'raw.githubusercontent.com',
                     'accept': '*/*',
@@ -215,7 +214,14 @@ class tools:
                     'user-agent': f'{random_user_agent()}' 
                     #'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36
             }
-        resp = fetcher.fetchURL(cache_url, headers=headers, stream=True)
+        # Use direct requests without cache for no_cache=True
+        if no_cache:
+            import requests
+            headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+            headers['Pragma']= 'no-cache'
+            resp = requests.get(cache_url, headers=headers, timeout=30)
+        else:
+            resp = fetcher.fetchURL(cache_url, headers=headers, stream=True)
         filesize = 0
         if resp is not None and resp.status_code == 200:
             contentLength = resp.headers.get("content-length")
