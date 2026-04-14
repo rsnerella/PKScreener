@@ -707,6 +707,11 @@ def PScanners(update: Update, context: CallbackContext) -> str:
     if query is None:
         start(update, context)
         return START_ROUTES
+    if query is not None:
+        try:
+            query.answer(text="Processing your request...", show_alert=False)
+        except Exception as e:
+            logger.error(f"Error answering callback query: {e}")
     data = str(query.data).upper().replace("C", "")
     if data[0:2] not in TOP_LEVEL_SCANNER_MENUS:
         # Someone is trying to send commands we do not support
@@ -752,7 +757,6 @@ def PScanners(update: Update, context: CallbackContext) -> str:
     mns.append(menu().create("H", "Home", 2))
     # mns.append(menu().create("P2", "Next", 2))
     inlineMenus = []
-    query.answer()
     for mnu in mns:
         inlineMenus.append(
             InlineKeyboardButton(
@@ -934,6 +938,11 @@ def subscribeToScannerAlerts(update: Update, context: CallbackContext) -> str:
     if query is None:
         start(update, context)
         return START_ROUTES
+    if query is not None:
+        try:
+            query.answer(text="Processing your request...", show_alert=False)
+        except Exception as e:
+            logger.error(f"Error answering callback query: {e}")
     scanId = str(query.data).upper().replace("SUB_", "").strip()
     global bot_available
     if not bot_available:
@@ -948,7 +957,6 @@ def subscribeToScannerAlerts(update: Update, context: CallbackContext) -> str:
         return START_ROUTES
     dbManager = DBManager()
     alertUser = dbManager.alertsForUser(int(user.id))
-    query.answer()
     menuText = ""
     is_subscription_enabled = bool(int(PKEnvironment().SUBSCRIPTION_ENABLED))
     if not is_subscription_enabled:
@@ -1202,6 +1210,12 @@ def XScanners(update: Update, context: CallbackContext) -> str:
     if query is None:
         start(update, context)
         return START_ROUTES
+    # This must be done before any time-consuming operations
+    if query is not None:
+        try:
+            query.answer(text="Processing your request...", show_alert=False)
+        except Exception as e:
+            logger.error(f"Error answering callback query: {e}")
     data = str(query.data).upper().replace("C", "")
     if data[0:2] not in TOP_LEVEL_SCANNER_MENUS:
         # Someone is trying to send commands we do not support
@@ -1269,7 +1283,6 @@ def XScanners(update: Update, context: CallbackContext) -> str:
     mns.append(menu().create("H", "Home", 2))
     mns.append(menu().create("P2", "Next", 2))
     inlineMenus = []
-    query.answer()
     for mnu in mns:
         inlineMenus.append(
             InlineKeyboardButton(
@@ -1313,7 +1326,11 @@ def Level2(update: Update, context: CallbackContext) -> str:
     user = updateCarrier.from_user
 
     query = update.callback_query
-    query.answer()
+    if query is not None:
+        try:
+            query.answer(text="Processing your request...", show_alert=False)
+        except Exception as e:
+            logger.error(f"Error answering callback query: {e}")
     preSelection = (
         str(query.data).upper().replace("C", "")
     )
@@ -1374,7 +1391,6 @@ def Level2(update: Update, context: CallbackContext) -> str:
         )
         mns.append(menu().create("H", "Home", 2))
         mns.append(menu().create(f"{nextOption}", "More Options", 2))
-        query.answer()
         for mnu in mns:
             activeInlineRow = getinlineMenuListRow(keyboardRows)
             prefix = (selection[0]+'_'+selection[1]+'_'+selection[2]) if selection[0] == "P" else selection[0]
@@ -1652,7 +1668,6 @@ def Level2(update: Update, context: CallbackContext) -> str:
                 mns.append(menu().create("H", "Home", 2))
                 mns.append(menu().create("P2", "Next", 2))
                 inlineMenus = []
-                query.answer()
                 for mnu in mns:
                     inlineMenus.append(
                         InlineKeyboardButton(
@@ -1724,7 +1739,11 @@ def handleHousekeeping(update: Update, context: CallbackContext) -> str:
     # Get user that sent /start and log his name
     user = updateCarrier.from_user
     query = update.callback_query
-    query.answer()
+    if query is not None:
+        try:
+            query.answer(text="Processing your request...", show_alert=False)
+        except Exception as e:
+            logger.error(f"Error answering callback query: {e}")
     preSelection = (str(query.data).upper().replace("C", ""))
     selection = preSelection.split("_")[1]
     if query is None:
@@ -1957,7 +1976,11 @@ def BBacktests(update: Update, context: CallbackContext) -> str:
     # Get user that sent /start and log his name
     user = updateCarrier.from_user
     query = update.callback_query
-    query.answer()
+    if query is not None:
+        try:
+            query.answer(text="Processing your request...", show_alert=False)
+        except Exception as e:
+            logger.error(f"Error answering callback query: {e}")
     keyboard = [
         [
             InlineKeyboardButton("Try Scanners", callback_data=str("CX")),
@@ -2002,7 +2025,11 @@ def end(update: Update, context: CallbackContext) -> str:
     ConversationHandler that the conversation is over.
     """
     query = update.callback_query
-    query.answer()
+    if query is not None:
+        try:
+            query.answer(text="Processing your request...", show_alert=False)
+        except Exception as e:
+            logger.error(f"Error answering callback query: {e}")
     responseText = f"See https://github.com/pkjmesra/PKScreener/?cache={int(time() / 86400)} for more details or join https://t.me/PKScreener. \nSee you next time!"
     responseText = f"{responseText}\nClick /start if you want to restart the session."
     editMessageText(query=query,editedText=sanitiseTexts(responseText),reply_markup=default_markup(query.from_user))
