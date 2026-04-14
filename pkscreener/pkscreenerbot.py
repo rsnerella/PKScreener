@@ -841,6 +841,12 @@ def viewSubscriptionOptions(update:Update,context:CallbackContext,sendOTP=False)
             updateCarrier = update.message
         if updateCarrier is None:
             return
+    query = update.callback_query if update.callback_query is not None else None
+    if query is not None:
+        try:
+            query.answer(text="Processing your request...", show_alert=False)
+        except Exception as e:
+            logger.error(f"Error answering callback query: {e}")
     # Get user that sent /start and log his name
     user = updateCarrier.from_user
     logger.info("User %s started the conversation.", user.first_name)
