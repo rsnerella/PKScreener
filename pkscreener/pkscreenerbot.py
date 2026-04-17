@@ -1082,7 +1082,10 @@ def scheduled_workflow_trigger():
     
     ist_tz = pytz.timezone('Asia/Kolkata')
     last_trigger_date = None
-    target_time = dt_time(9, 40, 0)
+    ALERT_HOUR = 9
+    ALERT_PRE_MINUTE = 30
+    ALERT_MINUTE = 33
+    target_time = dt_time(ALERT_HOUR, ALERT_MINUTE, 0)
     
     logger.info("🕐 Started scheduled workflow trigger thread")
     
@@ -1103,24 +1106,24 @@ def scheduled_workflow_trigger():
                 continue
             
             # Determine sleep interval based on time
-            if current_hour < 9 or (current_hour == 9 and current_minute < 30):
+            if current_hour < ALERT_HOUR or (current_hour == ALERT_HOUR and current_minute < ALERT_PRE_MINUTE):
                 # Before 9:30 AM - check every 10 minutes
                 sleep_interval = 600  # 10 minutes
-                logger.debug(f"Before 9:30 AM - checking every 10 minutes. Current time: {current_time}")
-            elif current_hour == 9 and current_minute < 40:
+                logger.debug(f"Before {ALERT_HOUR}:{ALERT_PRE_MINUTE} - checking every 10 minutes. Current time: {current_time}")
+            elif current_hour == ALERT_HOUR and current_minute < ALERT_MINUTE:
                 # Between 9:30 AM and 9:40 AM - check every 1 minute
                 sleep_interval = 60  # 1 minute
-                logger.debug(f"Approaching 9:40 AM - checking every minute. Current time: {current_time}")
+                logger.debug(f"Approaching {ALERT_HOUR}:{ALERT_MINUTE} - checking every minute. Current time: {current_time}")
             else:
                 # After 9:40 AM - check every hour (already passed for today)
                 sleep_interval = 3600  # 1 hour
-                logger.debug(f"After 9:40 AM - checking hourly. Current time: {current_time}")
+                logger.debug(f"After {ALERT_HOUR}:{ALERT_MINUTE} - checking hourly. Current time: {current_time}")
             
             # Check if it's exactly 9:40 AM (within the same minute)
             if (current_hour == target_time.hour and 
                 current_minute == target_time.minute):
                 
-                logger.info(f"🕐 It's 9:40 AM IST on {now.date()} - triggering production scans workflow")
+                logger.info(f"🕐 It's {ALERT_HOUR}:{ALERT_MINUTE} AM IST on {now.date()} - triggering production scans workflow")
                 
                 # Trigger the workflow
                 success = trigger_prod_scans_workflow()
