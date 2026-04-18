@@ -1464,8 +1464,9 @@ def Level2(update: Update, context: CallbackContext) -> str:
                 asList=True,
                 renderStyle=MenuRenderStyle.STANDALONE,
             )
-            mns.append(menu().create("P1", "More Options", 2))
-            mns.append(menu().create("H", "Home", 2))
+            if mns is not None:
+                mns.append(menu().create("P1", "More Options", 2))
+                mns.append(menu().create("H", "Home", 2))
         elif selection[1] in ["P1", "N"]:
             selection.extend(["", ""])
     elif len(selection) == 3:
