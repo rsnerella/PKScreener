@@ -318,10 +318,10 @@ class APIDocGenerator:
             else:
                 print(f"  ⏭️ Skipped (no public classes/functions)")
         
-        # Generate the main API reference index
+        # Generate the main API reference index - use a different name to avoid conflict
         api_index = self.generate_navigation_summary(all_modules_info)
-        (self.book_src / "API_REFERENCE.md").write_text(api_index, encoding='utf-8')
-        print(f"\n✅ Generated API_REFERENCE.md")
+        (self.book_src / "API_INDEX.md").write_text(api_index, encoding='utf-8')
+        print(f"\n✅ Generated API_INDEX.md")
         
         # Generate an index page for the API directory
         api_index_page = "# API Modules\n\n"

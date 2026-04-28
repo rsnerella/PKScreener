@@ -13,7 +13,7 @@
 ## 🔧 Developer Guide
 
 - [Developer Guide](DEVELOPER_GUIDE.md)
-- [API Reference](API_REFERENCE.md)
+- [API Reference](API_INDEX.md)
 - [Contributing](CONTRIBUTING.md)
 - [Code of Conduct](CODE_OF_CONDUCT.md)
 
