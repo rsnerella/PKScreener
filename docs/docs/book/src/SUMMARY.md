@@ -6,9 +6,9 @@
 
 - [Getting Started](README.md)
 - [Installation](INSTALLATION.md)
-- [Configuration](README.md#hack-it-your-way)
-- [Understanding Results](README.md#understanding-the-result-table)
-- [Creating a Telegram Bot](README.md#creating-your-own-telegram-channel-to-receive-your-own-alerts)
+- [Configuration](README.md)
+- [Understanding Results](README.md)
+- [Creating a Telegram Bot](README.md)
 
 ## 🔧 Developer Guide
 
