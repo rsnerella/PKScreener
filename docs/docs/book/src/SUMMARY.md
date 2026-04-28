@@ -2,33 +2,36 @@
 
 [Introduction](README.md)
 
-## User Guide
+## 📖 User Guide
 
-<!-- - [Getting Started](README.md) -->
-- [Scanners Overview](SCAN_WORKFLOWS.md)
-<!-- - [Results Interpretation](README.md) -->
-<!-- - [Telegram Bot Setup](README.md) -->
+- [Getting Started](README.md#installation)
+- [Usage](README.md#usage)
+- [Configuration](README.md#configuration)
+- [Understanding Results](README.md#understanding-the-result-table)
 
-## Developer Guide
+## 🔧 Developer Guide
 
 - [Developer Guide](DEVELOPER_GUIDE.md)
 - [System Architecture](ARCHITECTURE.md)
-- [High-Performance Data System](HIGH_PERFORMANCE_DATA.md)
+- [High-Performance Data](HIGH_PERFORMANCE_DATA.md)
 - [Scalable Architecture](SCALABLE_ARCHITECTURE.md)
 
-## Technical Reference
+## 📚 API Reference
 
-<!-- - [Scan Workflows](SCAN_WORKFLOWS.md) -->
-- [API Reference](API_REFERENCE.md)
+- [API Reference Overview](API_REFERENCE.md)
+  - [Root Modules](api/INDEX.md)
+  - [Classes](api/INDEX.md#classes)
+
+## 🧪 Testing
+
 - [Testing Guide](TESTING.md)
+- [Test Coverage](TESTING.md#test-coverage)
 
-## Advanced Topics
+## 🚀 Advanced Topics
 
 - [Release Process](RELEASE_PROCESS.md)
+- [Contributing](CONTRIBUTING.md)
+
+## 📄 Legal
+
 - [Disclaimer](Disclaimer.txt)
-
-## Appendices
-
-- [Glossary](GLOSSARY.md)
-- [Changelog](CHANGELOG.md)
-- [FAQ](FAQ.md)
