@@ -1,0 +1,54 @@
+name: Deploy mdBook Documentation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/docs/book/**'
+      - '.github/workflows/deploy-docs.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup mdBook
+        uses: peaceiris/actions-mdbook@v1
+        with:
+          mdbook-version: '0.4.36'
+      
+      - name: Build mdBook
+        run: |
+          cd docs/docs/book
+          mdbook build
+      
+      - name: Prepare deployment with help subdirectory
+        run: |
+          # Create a deployment directory
+          mkdir -p deployment/help
+          # Copy the built book to the help subdirectory
+          cp -r docs/docs/book/book/* deployment/help/
+          # OPTIONAL: Create redirect at root (comment out if you want to keep instrument lookup)
+          # echo '<!DOCTYPE html><html><head><meta http-equiv="refresh" content="0; url=help/"></head><body>Redirecting to <a href="help/">documentation</a>...</body></html>' > deployment/index.html
+      
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+      
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: 'deployment/'
+      
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v4
