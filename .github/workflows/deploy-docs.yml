@@ -62,10 +62,10 @@ jobs:
       - name: Verify documentation generation
         run: |
           echo "📊 Generated API files:"
-          ls -la docs/docs/book/src/api/ | head -20
+          ls -la docs/docs/book/src/api/ | head -50
           echo ""
           echo "📄 Main API Reference:"
-          ls -la docs/docs/book/src/API_REFERENCE.md
+          ls -la docs/docs/book/src/API_INDEX.md
       
       - name: Build mdBook
         run: |

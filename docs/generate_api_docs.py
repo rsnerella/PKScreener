@@ -6,6 +6,7 @@ This script finds EVERY Python file in pkscreener/ and its subdirectories.
 
 import ast
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -36,6 +37,8 @@ class APIDocGenerator:
                 dirs.remove('.venv')
             if 'venv' in dirs:
                 dirs.remove('venv')
+            if '.pytest_cache' in dirs:
+                dirs.remove('.pytest_cache')
             
             for file in files:
                 if file.endswith('.py') and file != '__init__.py':
@@ -233,30 +236,52 @@ class APIDocGenerator:
         summary = "# API Reference\n\n"
         summary += "Welcome to the PKScreener API Reference. This documentation is automatically generated from the source code.\n\n"
         summary += f"**Last Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
-        summary += "## Module Index\n\n"
         
-        # Sort directories
-        for dir_name in sorted(modules_by_dir.keys()):
-            if dir_name == 'root':
-                summary += "### Root Modules\n\n"
-            else:
-                summary += f"### `{dir_name}/`\n\n"
-            
-            for module in sorted(modules_by_dir[dir_name], key=lambda x: x['display_name']):
-                # Count classes and functions for display
+        # Group by major categories
+        core_modules = []
+        class_modules = []
+        other_modules = []
+        
+        for dir_name, modules in modules_by_dir.items():
+            for module in modules:
+                if 'classes' in dir_name or 'class' in module['display_name'].lower():
+                    class_modules.append((dir_name, module))
+                elif module['display_name'] in ['globals', 'MainApplication', 'pkscreenercli', 'pkscreenerbot']:
+                    core_modules.append((dir_name, module))
+                else:
+                    other_modules.append((dir_name, module))
+        
+        # Core Modules section
+        if core_modules:
+            summary += "## Core Modules\n\n"
+            for dir_name, module in sorted(core_modules, key=lambda x: x[1]['display_name']):
                 class_count = len(module['parsed_info']['classes'])
                 func_count = len(module['parsed_info']['functions'])
-                
-                badge = ""
-                if class_count > 0:
-                    badge += f" `{class_count} class{'es' if class_count != 1 else ''}`"
-                if func_count > 0:
-                    badge += f" `{func_count} function{'s' if func_count != 1 else ''}`"
-                
-                # Create a safe filename from module name
+                badge = self._get_badge(class_count, func_count)
                 safe_name = module['module_name'].replace('pkscreener.', '').replace('.', '_')
                 summary += f"- [`{module['display_name']}`](api/API_{safe_name}.md){badge}\n"
-            
+            summary += "\n"
+        
+        # Classes section
+        if class_modules:
+            summary += "## Classes & Modules\n\n"
+            for dir_name, module in sorted(class_modules, key=lambda x: x[1]['display_name']):
+                class_count = len(module['parsed_info']['classes'])
+                func_count = len(module['parsed_info']['functions'])
+                badge = self._get_badge(class_count, func_count)
+                safe_name = module['module_name'].replace('pkscreener.', '').replace('.', '_')
+                summary += f"- [`{module['display_name']}`](api/API_{safe_name}.md){badge}\n"
+            summary += "\n"
+        
+        # Other modules
+        if other_modules:
+            summary += "## Other Modules\n\n"
+            for dir_name, module in sorted(other_modules, key=lambda x: x[1]['display_name']):
+                class_count = len(module['parsed_info']['classes'])
+                func_count = len(module['parsed_info']['functions'])
+                badge = self._get_badge(class_count, func_count)
+                safe_name = module['module_name'].replace('pkscreener.', '').replace('.', '_')
+                summary += f"- [`{module['display_name']}`](api/API_{safe_name}.md){badge}\n"
             summary += "\n"
         
         summary += "---\n\n"
@@ -268,6 +293,7 @@ class APIDocGenerator:
         summary += "├── globals.py\n"
         summary += "├── pkscreenercli.py\n"
         summary += "├── pkscreenerbot.py\n"
+        summary += "├── MainApplication.py\n"
         summary += "├── classes/\n"
         summary += "│   ├── StockScreener.py\n"
         summary += "│   ├── ScreeningStatistics.py\n"
@@ -278,6 +304,8 @@ class APIDocGenerator:
         summary += "│   │   └── BotHandlers.py\n"
         summary += "│   ├── cli/\n"
         summary += "│   │   └── ...\n"
+        summary += "│   ├── Exchange/\n"
+        summary += "│   │   └── ...\n"
         summary += "│   └── screening/\n"
         summary += "│       └── ...\n"
         summary += "└── ...\n"
@@ -285,22 +313,98 @@ class APIDocGenerator:
         
         return summary
     
+    def _get_badge(self, class_count: int, func_count: int) -> str:
+        """Generate a badge string for classes and functions count."""
+        badges = []
+        if class_count > 0:
+            badges.append(f" `{class_count} class{'es' if class_count != 1 else ''}`")
+        if func_count > 0:
+            badges.append(f" `{func_count} function{'s' if func_count != 1 else ''}`")
+        return "".join(badges)
+    
+    def update_summary_md(self, api_files: List[Path]):
+        """Update SUMMARY.md to include all generated API files."""
+        summary_path = self.book_src / "SUMMARY.md"
+        
+        if not summary_path.exists():
+            print(f"⚠️ SUMMARY.md not found at {summary_path}")
+            return
+        
+        with open(summary_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # Build the API links
+        api_links = []
+        for api_file in sorted(api_files):
+            if api_file.name not in ["API_INDEX.md", "INDEX.md"]:
+                name = api_file.stem.replace("API_", "").replace("_", "::")
+                if len(name) > 50:
+                    name = name[:47] + "..."
+                api_links.append(f"    - [{name}](api/{api_file.name})")
+        
+        # Build the new API Reference section - WITHOUT the invalid text line
+        new_api_section = '''## 🔧 Developer Guide
+
+- [Developer Guide](DEVELOPER_GUIDE.md)
+- [API Reference](API_INDEX.md)
+'''
+        
+        # Add individual API file links (limit to first 20)
+        for link in api_links[:20]:
+            new_api_section += f'{link}\n'
+        
+        # IMPORTANT: Remove the problematic line that mdBook can't parse
+        # Just add a comment instead of a text line
+        if len(api_links) > 20:
+            new_api_section += f'    <!-- {len(api_links) - 20} more modules available in API_INDEX.md -->\n'
+        
+        new_api_section += '''
+- [Contributing](CONTRIBUTING.md)
+- [Code of Conduct](CODE_OF_CONDUCT.md)
+'''
+        
+        # Find and replace the Developer Guide section
+        dev_guide_pattern = r'(## 🔧 Developer Guide\n\n).*?(?=\n## |\Z)'
+        
+        if re.search(dev_guide_pattern, content, re.DOTALL):
+            content = re.sub(dev_guide_pattern, new_api_section, content, flags=re.DOTALL)
+        else:
+            user_guide_end = content.find('## 🏗️ Architecture')
+            if user_guide_end != -1:
+                content = content[:user_guide_end] + new_api_section + '\n' + content[user_guide_end:]
+            else:
+                content += '\n' + new_api_section
+        
+        with open(summary_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        
+        print(f"✅ Updated SUMMARY.md with {len(api_links)} API entries")
+        
     def generate_all_docs(self):
         """Recursively generate documentation for all Python files."""
-        print("🔍 Scanning for Python files...")
+        print("=" * 60)
+        print("📚 PKScreener API Documentation Generator")
+        print("=" * 60)
+        print()
         
         pkscreener_dir = self.project_root / 'pkscreener'
         if not pkscreener_dir.exists():
             print(f"❌ Error: {pkscreener_dir} not found!")
+            print(f"   Please run this script from the project root directory.")
             return
         
         # Find all Python files
+        print("🔍 Scanning for Python files...")
         python_files = self.find_all_python_files(pkscreener_dir)
         print(f"📁 Found {len(python_files)} Python files to document\n")
         
         all_modules_info = []
         
         for filepath, module_name in python_files:
+            # Skip test files
+            if 'test' in str(filepath):
+                continue
+                
             print(f"📄 Processing: {filepath.relative_to(self.project_root)}")
             parsed_info = self.parse_python_file(filepath)
             
@@ -310,6 +414,9 @@ class APIDocGenerator:
                 
                 # Save to api directory with safe filename
                 safe_name = module_name.replace('pkscreener.', '').replace('.', '_')
+                # Limit filename length
+                if len(safe_name) > 100:
+                    safe_name = safe_name[:97] + "..."
                 output_path = self.api_dir / f"API_{safe_name}.md"
                 output_path.write_text(markdown, encoding='utf-8')
                 print(f"  ✓ Generated {output_path.name}")
@@ -318,7 +425,7 @@ class APIDocGenerator:
             else:
                 print(f"  ⏭️ Skipped (no public classes/functions)")
         
-        # Generate the main API reference index - use a different name to avoid conflict
+        # Generate the main API reference index
         api_index = self.generate_navigation_summary(all_modules_info)
         (self.book_src / "API_INDEX.md").write_text(api_index, encoding='utf-8')
         print(f"\n✅ Generated API_INDEX.md")
@@ -326,16 +433,37 @@ class APIDocGenerator:
         # Generate an index page for the API directory
         api_index_page = "# API Modules\n\n"
         api_index_page += "This directory contains API documentation for all PKScreener modules.\n\n"
-        api_index_page += "## Contents\n\n"
+        api_index_page += f"**Total Modules:** {len(all_modules_info)}\n\n"
+        api_index_page += "## Quick Navigation\n\n"
         
+        # Group by first letter for easier navigation
+        modules_by_letter = {}
         for api_file in sorted(self.api_dir.glob("API_*.md")):
-            if api_file.name != "API_INDEX.md":
-                api_index_page += f"- [{api_file.stem.replace('API_', '')}]({api_file.name})\n"
+            if api_file.name not in ["API_INDEX.md", "INDEX.md"]:
+                first_char = api_file.stem.replace("API_", "")[0].upper()
+                if first_char not in modules_by_letter:
+                    modules_by_letter[first_char] = []
+                modules_by_letter[first_char].append(api_file)
+        
+        for letter in sorted(modules_by_letter.keys()):
+            api_index_page += f"### {letter}\n\n"
+            for api_file in modules_by_letter[letter]:
+                display_name = api_file.stem.replace("API_", "").replace("_", "::")
+                api_index_page += f"- [{display_name}]({api_file.name})\n"
+            api_index_page += "\n"
         
         (self.api_dir / "INDEX.md").write_text(api_index_page, encoding='utf-8')
+        print(f"✅ Generated api/INDEX.md")
         
-        print(f"\n✨ API documentation complete!")
+        # Update SUMMARY.md with all API files
+        api_files = list(self.api_dir.glob("API_*.md"))
+        self.update_summary_md(api_files)
+        
+        print(f"\n" + "=" * 60)
+        print(f"✨ API documentation complete!")
         print(f"📊 Documented {len(all_modules_info)} modules with public APIs")
+        print(f"📁 API files generated in: {self.api_dir}")
+        print("=" * 60)
 
 def main():
     project_root = Path.cwd()
@@ -355,6 +483,7 @@ def main():
     if book_src is None:
         print("❌ Error: Could not find mdBook src directory")
         print("Please ensure you're running this from the project root")
+        print(f"Looked in: {book_src_candidates}")
         sys.exit(1)
     
     print(f"📚 Book source directory: {book_src}")
