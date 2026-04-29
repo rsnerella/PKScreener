@@ -349,14 +349,14 @@ class APIDocGenerator:
 - [API Reference](API_INDEX.md)
 '''
         
-        # Add individual API file links (limit to first 20)
-        for link in api_links[:20]:
+        # Add individual API file links (limit to first 250)
+        for link in api_links[:250]:
             new_api_section += f'{link}\n'
         
         # IMPORTANT: Remove the problematic line that mdBook can't parse
         # Just add a comment instead of a text line
-        if len(api_links) > 20:
-            new_api_section += f'    <!-- {len(api_links) - 20} more modules available in API_INDEX.md -->\n'
+        if len(api_links) > 250:
+            new_api_section += f'    <!-- {len(api_links) - 250} more modules available in API_INDEX.md -->\n'
         
         new_api_section += '''
 - [Contributing](CONTRIBUTING.md)

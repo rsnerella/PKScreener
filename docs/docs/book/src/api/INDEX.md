@@ -10,9 +10,6 @@ This directory contains API documentation for all PKScreener modules.
 
 - [classes::ArtTexts](API_classes_ArtTexts.md)
 - [classes::AssetsManager](API_classes_AssetsManager.md)
-- [classes::Backtest](API_classes_Backtest.md)
-- [classes::BacktestHandler](API_classes_BacktestHandler.md)
-- [classes::BacktestUtils](API_classes_BacktestUtils.md)
 - [classes::Barometer](API_classes_Barometer.md)
 - [classes::CandlePatterns](API_classes_CandlePatterns.md)
 - [classes::Changelog](API_classes_Changelog.md)
