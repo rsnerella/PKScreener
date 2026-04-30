@@ -1243,14 +1243,16 @@ def main(userArgs=None, optionalFinalOutcome_df=None):
         else:
             listStockCodes = ",".join(list(screenResults.index))
     if executeOption == 26:
-        dividend_df, bonus_df, stockSplit_df = mstarFetcher.getCorporateActions()
+        mFetcher = morningstarDataFetcher()
+        dividend_df, bonus_df, stockSplit_df = mFetcher.getCorporateActions()
         ca_dfs = [dividend_df, bonus_df, stockSplit_df]
         listStockCodes = []
         for df in ca_dfs:
-            df = df[
-                df["Stock"].astype(str).str.contains("BSE:") == False
-            ]
-            listStockCodes.extend(list(df["Stock"]))
+            if df is not None and not df.empty:
+                df = df[
+                    df["Stock"].astype(str).str.contains("BSE:") == False
+                ]
+                listStockCodes.extend(list(df["Stock"]))
     if executeOption == 29 and not PKDateUtilities.isTradingTime():
         message = "\n[👉🏻] Bid/Ask build up report can only be generated during trading hours."
         OutputControls().printOutput(
