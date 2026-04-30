@@ -1630,9 +1630,9 @@ def main(userArgs=None, optionalFinalOutcome_df=None):
                     removedUnusedColumns(screenResults, saveResults, ["Date"],userArgs=userPassedArgs)
                     screen_copy = screenResults.copy()
                     screen_copy.reset_index(inplace=True)
-                    dividend_df = pd.merge(screen_copy, dividend_df, on='Stock')
-                    bonus_df = pd.merge(screen_copy, bonus_df, on='Stock')
-                    stockSplit_df = pd.merge(screen_copy, stockSplit_df, on='Stock')
+                    dividend_df = pd.merge(screen_copy, dividend_df, on='Stock') if dividend_df is not None and not dividend_df.empty else None
+                    bonus_df = pd.merge(screen_copy, bonus_df, on='Stock') if bonus_df is not None and not bonus_df.empty else None
+                    stockSplit_df = pd.merge(screen_copy, stockSplit_df, on='Stock') if stockSplit_df is not None and not stockSplit_df.empty else None 
                     corp_dfs = [dividend_df, bonus_df, stockSplit_df]
                     shareable_strings = []
                     shouldSend = False
@@ -1640,7 +1640,7 @@ def main(userArgs=None, optionalFinalOutcome_df=None):
                     caption_df = None
                     caption_results = ""
                     for corp_df in corp_dfs:
-                        if corp_df is None:
+                        if corp_df is None or corp_df.empty:
                             continue
                         tab_results = ""
                         if corp_df is not None and not corp_df.empty:
@@ -1683,14 +1683,14 @@ def main(userArgs=None, optionalFinalOutcome_df=None):
                         sendQuickScanResult(
                             menuChoiceHierarchy,
                             user,
-                            shareable_strings[0],
+                            shareable_strings[0] if len(shareable_strings) > 0 else "",
                             ImageUtility.PKImageTools.removeAllColorStyles(shareable_strings[0]),
                             caption,
                             png_file,
                             png_ext,
-                            addendum=shareable_strings[1],
+                            addendum=shareable_strings[1] if len(shareable_strings) > 1 else "",
                             addendumLabel="NSE Stocks giving bonus:",
-                            backtestSummary=shareable_strings[2],
+                            backtestSummary=shareable_strings[2] if len(shareable_strings) > 2 else "",
                             backtestDetail="",
                             summaryLabel = "NSE Stocks with corporate action type stock split:",
                             detailLabel = None,
