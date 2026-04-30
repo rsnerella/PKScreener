@@ -1368,7 +1368,6 @@ def main(userArgs=None, optionalFinalOutcome_df=None):
                     PKAnalyticsService().send_event("app_exit")
                     sys.exit(0)
             elif indexOption == "N":
-                import pandas as pd
                 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
                 # import tensorflow as tf
                 # tf.get_logger().setLevel('ERROR')
