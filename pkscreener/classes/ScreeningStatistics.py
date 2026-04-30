@@ -4195,6 +4195,10 @@ class ScreeningStatistics:
     def validateVCP(
         self, df, screenDict, saveDict, stockName=None, window=3, percentageFromTop=3
     ):
+        """
+        Args:
+            df: DataFrame in descending order (newest first, oldest last)
+        """
         if df is None or len(df) == 0:
             return False
         data = df.copy()
@@ -4208,57 +4212,85 @@ class ScreeningStatistics:
             percentageFromTop /= 100
             data.reset_index(inplace=True)
             data.rename(columns={"index": "Date"}, inplace=True)
-            data["tops"] = (data["high"].iloc[list(pktalib.argrelextrema(np.array(data["high"]), np.greater_equal, order=window)[0])].head(4))
-            data["bots"] = (data["low"].iloc[list(pktalib.argrelextrema(np.array(data["low"]), np.less_equal, order=window)[0])].head(4))
+            
+            # Get tops and bots - using more than 4 for better pattern detection
+            top_indices = list(pktalib.argrelextrema(np.array(data["high"]), np.greater_equal, order=window)[0])
+            data["tops"] = data["high"].iloc[top_indices].head(6)  # Look at up to 6 tops
+            bot_indices = list(pktalib.argrelextrema(np.array(data["low"]), np.less_equal, order=window)[0])
+            data["bots"] = data["low"].iloc[bot_indices].head(6)
+            
             data = data.fillna(0)
             data = data.replace([np.inf, -np.inf], 0)
+            
             tops = data[data.tops > 0]
-            # bots = data[data.bots > 0]
+            
+            # Need at least 3 tops for a meaningful VCP pattern
+            if len(tops) < 3:
+                return False
+                
             highestTop = round(tops.describe()["high"]["max"], 1)
             allTimeHigh = max(data["high"])
-            withinATHRange = data["close"].iloc[0] >= (allTimeHigh-allTimeHigh * float(self.configManager.vcpRangePercentageFromTop)/100)
+            withinATHRange = data["close"].iloc[0] >= (allTimeHigh - allTimeHigh * float(self.configManager.vcpRangePercentageFromTop)/100)
+            
             if not withinATHRange and self.configManager.enableAdditionalVCPFilters:
                 # Last close is not within all time high range
                 return False
-            filteredTops = tops[
-                tops.tops > (highestTop - (highestTop * percentageFromTop))
-            ]
-            if filteredTops.equals(tops):  # Tops are in the range
-                lowPoints = []
-                for i in range(len(tops) - 1):
-                    endDate = tops.iloc[i]["Date"]
-                    startDate = tops.iloc[i + 1]["Date"]
-                    lowPoints.append(
-                        data[
-                            (data.Date >= startDate) & (data.Date <= endDate)
-                        ].describe()["low"]["min"]
+            
+            # Calculate how many of the most recent tops are within the percentage range
+            # This is more important than older tops for VCP pattern
+            recent_tops_count = min(3, len(tops))
+            recent_tops = tops.tail(recent_tops_count)
+            tops_in_range = recent_tops[recent_tops.tops > (highestTop - (highestTop * percentageFromTop))]
+            
+            # At least 66% of recent tops should be tightening
+            if len(tops_in_range) / recent_tops_count < 0.66: # .66 or 2 out of 3
+                return False
+            
+            # Calculate low points between tops for contraction analysis
+            lowPoints = []
+            
+            for i in range(len(tops) - 1):
+                endDate = tops.iloc[i]["Date"]
+                startDate = tops.iloc[i + 1]["Date"]
+                segment_data = data[(data.Date >= startDate) & (data.Date <= endDate)]
+                if not segment_data.empty:
+                    lowPoint = segment_data.describe()["low"]["min"]
+                    lowPoints.append(lowPoint)
+            
+            if len(lowPoints) < 2:
+                return False
+            
+            # Check if low points are rising (higher lows - indicating contraction)
+            rising_lows = all(lowPoints[i] < lowPoints[i+1] for i in range(len(lowPoints)-1))
+            
+            # Check if the last 2-3 low points are rising
+            recent_lows_rising = all(lowPoints[i] < lowPoints[i+1] for i in range(-min(2, len(lowPoints)-1), -1)) if len(lowPoints) >= 2 else False
+            
+            ltp = data.head(1)["close"].iloc[0]
+            
+            # Valid VCP requires: tightening tops AND rising lows AND price below highest top but above recent lows
+            if (rising_lows or recent_lows_rising) and ltp < highestTop and ltp > lowPoints[-1]:
+                saved = self.findCurrentSavedValue(screenDict, saveDict, "Pattern")
+                isTightening, consolidations, deviationScore = self.validateConsolidationContraction(
+                    df=df.copy(),
+                    legsToCheck=(int(self.configManager.vcpLegsToCheckForConsolidation) if self.configManager.enableAdditionalVCPFilters else 0),
+                    stockName=stockName
+                )
+                consolidations = [f"{str(x)}%" for x in consolidations]
+                
+                if isTightening:
+                    screenDict["Pattern"] = (
+                        saved[0] 
+                        + colorText.GREEN
+                        + f"VCP (BO: {highestTop}, Cons.:{','.join(consolidations)})"
+                        + colorText.END
                     )
-                lowPointsOrg = lowPoints
-                lowPoints.sort(reverse=True)
-                lowPointsSorted = lowPoints
-                if data.empty or len(lowPoints) < 1:
-                    return False
-                ltp = data.head(1)["close"].iloc[0]
-                if (
-                    lowPointsOrg == lowPointsSorted
-                    and ltp < highestTop
-                    and ltp > lowPoints[0]
-                ):
-                    saved = self.findCurrentSavedValue(screenDict, saveDict, "Pattern")
-                    isTightening, consolidations, deviationScore = self.validateConsolidationContraction(df=df.copy(),legsToCheck=(int(self.configManager.vcpLegsToCheckForConsolidation) if self.configManager.enableAdditionalVCPFilters else 0),stockName=stockName)
-                    consolidations = [f"{str(x)}%" for x in consolidations]
-                    if isTightening:
-                        screenDict["Pattern"] = (
-                            saved[0] 
-                            + colorText.GREEN
-                            + f"VCP (BO: {highestTop}, Cons.:{','.join(consolidations)})"
-                            + colorText.END
-                        )
-                        saveDict["Pattern"] = saved[1] + f"VCP (BO: {highestTop}, Cons.:{','.join(consolidations)})"
-                        screenDict["deviationScore"] = deviationScore
-                        saveDict["deviationScore"] = deviationScore
-                        return True
-                    return False
+                    saveDict["Pattern"] = saved[1] + f"VCP (BO: {highestTop}, Cons.:{','.join(consolidations)})"
+                    screenDict["deviationScore"] = deviationScore
+                    saveDict["deviationScore"] = deviationScore
+                    return True
+                    
+            return False
         except KeyboardInterrupt: # pragma: no cover
             raise KeyboardInterrupt
         except Exception as e:  # pragma: no cover

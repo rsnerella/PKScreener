@@ -183,10 +183,12 @@ class PKAssetsManager:
         Apply fresh tick data from PKBrokers to update stale stock data.
         
         This method downloads the latest ticks.json from PKBrokers/PKScreener
-        and merges today's OHLCV data into the existing stockDict.
+        and merges today's OHLCV data into the existing stockDict while
+        preserving the original timestamp format.
         
         Args:
             stockDict: Dictionary of stock data (symbol -> dict with 'data', 'columns', 'index')
+                       Dictionary with 'index' in ascending order (oldest first, newest last)
             
         Returns:
             dict: Updated stockDict with fresh tick data merged
@@ -270,6 +272,50 @@ class PKAssetsManager:
             is_trading_hours = PKDateUtilities.isTradingTime()
             updated_count = 0
             
+            # IMPORTANT: First, detect the timestamp format from existing data
+            # Get a sample symbol to detect the format
+            sample_symbol = next(iter(stockDict.keys())) if stockDict else None
+            original_timestamp_format = None
+            original_timestamp_sample = None
+            
+            if sample_symbol and sample_symbol in stockDict:
+                sample_data = stockDict[sample_symbol]
+                if isinstance(sample_data, dict) and 'index' in sample_data and sample_data['index']:
+                    original_timestamp_sample = sample_data['index'][-1]
+                    # Detect if it's a string, datetime object, or timestamp
+                    if isinstance(original_timestamp_sample, str):
+                        if '.' in original_timestamp_sample and 'T' in original_timestamp_sample:
+                            original_timestamp_format = 'iso_with_microseconds'
+                        elif 'T' in original_timestamp_sample:
+                            original_timestamp_format = 'iso'
+                        elif ' ' in original_timestamp_sample:
+                            original_timestamp_format = 'datetime_string'
+                        else:
+                            original_timestamp_format = 'string'
+                    elif isinstance(original_timestamp_sample, (int, float)):
+                        original_timestamp_format = 'unix_timestamp'
+                    elif hasattr(original_timestamp_sample, 'strftime'):
+                        original_timestamp_format = 'datetime_object'
+            
+            default_logger().debug(f"Detected original timestamp format: {original_timestamp_format}")
+            
+            # Helper function to format timestamp to match original format
+            def format_timestamp_to_match_original(dt: datetime, original_format: str, original_sample=None) -> str:
+                """Format a datetime to match the original timestamp format."""
+                if original_format == 'iso_with_microseconds':
+                    return dt.isoformat()
+                elif original_format == 'iso':
+                    return dt.isoformat().split('.')[0]
+                elif original_format == 'datetime_string':
+                    return dt.strftime('%Y-%m-%d %H:%M:%S')
+                elif original_format == 'unix_timestamp':
+                    return int(dt.timestamp())
+                elif original_format == 'datetime_object':
+                    return dt
+                else:
+                    # Default to datetime string format
+                    return dt.strftime('%Y-%m-%d %H:%M:%S')
+            
             # Apply ticks to stockDict
             for instrument_token, tick_info in ticks_data.items():
                 if not isinstance(tick_info, dict):
@@ -281,7 +327,7 @@ class PKAssetsManager:
                 if not symbol or not ohlcv or ohlcv.get('close', 0) <= 0:
                     continue
                 
-                # Check if ohlcv has a timestamp field (alternative to last_update)
+                # Check if ohlcv has a timestamp field
                 ohlcv_timestamp = ohlcv.get('timestamp')
                 
                 # Find matching symbol in stockDict
@@ -325,17 +371,13 @@ class PKAssetsManager:
                                     if timestamp_dt.tzinfo is None:
                                         timestamp_dt = timezone.localize(timestamp_dt)
                                     timestamp_dt = timestamp_dt.astimezone(timezone)
-                                timestamp_str = timestamp_dt.strftime('%Y-%m-%d %H:%M:%S')
-                            except Exception as e:
-                                # Fallback to current time if last_update parsing fails
-                                timestamp_str = now.strftime('%Y-%m-%d %H:%M:%S')
+                            except Exception:
+                                timestamp_dt = now
                         else:
-                            # Fallback to current time if last_update not available
-                            timestamp_str = now.strftime('%Y-%m-%d %H:%M:%S')
+                            timestamp_dt = now
                     else:
-                        # After market hours, try to use the actual timestamp when data was captured
-                        # This shows when each stock's data was actually updated, not just market close time
-                        last_update = ohlcv_timestamp # tick_info.get('last_update') or tick_info.get('last_updated') or ohlcv_timestamp
+                        # After market hours, use market close time
+                        last_update = ohlcv_timestamp
                         if last_update:
                             try:
                                 # Parse the timestamp (could be ISO string or float)
@@ -353,13 +395,18 @@ class PKAssetsManager:
                                     if timestamp_dt.tzinfo is None:
                                         timestamp_dt = timezone.localize(timestamp_dt)
                                     timestamp_dt = timestamp_dt.astimezone(timezone)
-                                timestamp_str = timestamp_dt.strftime('%Y-%m-%d %H:%M:%S')
-                            except Exception as e:
-                                # Fallback to market close time if parsing fails
-                                timestamp_str = f"{today_str} 15:30:00"
+                            except Exception:
+                                # Use market close time
+                                timestamp_dt = timezone.localize(datetime.strptime(f"{today_str} 15:30:00", '%Y-%m-%d %H:%M:%S'))
                         else:
-                            # No timestamp available, use market close time
-                            timestamp_str = f"{today_str} 15:30:00"
+                            timestamp_dt = timezone.localize(datetime.strptime(f"{today_str} 15:30:00", '%Y-%m-%d %H:%M:%S'))
+                    
+                    # CRITICAL FIX: Format timestamp to match original data format
+                    timestamp_str = format_timestamp_to_match_original(
+                        timestamp_dt, 
+                        original_timestamp_format,
+                        original_timestamp_sample
+                    )
                     
                     # Check if today's data already exists and update/append
                     data_rows = stock_data.get('data', [])
@@ -376,7 +423,7 @@ class PKAssetsManager:
                             new_rows.append(row)
                             new_index.append(idx)
                     
-                    # Append today's fresh data with proper timestamp
+                    # Append today's fresh data with properly formatted timestamp
                     new_rows.append(today_row)
                     new_index.append(timestamp_str)
                     
