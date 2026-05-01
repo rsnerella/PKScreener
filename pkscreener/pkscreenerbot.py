@@ -2636,7 +2636,7 @@ def command_handler(update: Update, context: CallbackContext) -> None:
                 f"{cmdText}\n\n{cmd_item.commandTextKey()} for {cmd_item.commandTextLabel()}"
             )
         if cmd in ["x"]:
-            cmdText = f"{cmdText}\n\nFor option 0 <Screen stocks by the stock name>, please type in the command in the following format\n/X_0 SBIN\n or \n/X_0_0 SBIN\nand hit send where SBIN is the NSE stock code.For multiple stocks, you can type in \n/X_0 SBIN,ICICIBANK,OtherStocks\nYou can put in any number of stocks separated by space or comma(,)."
+            cmdText = f"{cmdText}\n\nFor option 0 [Screen stocks by the stock name], please type in the command in the following format\n/X_0 SBIN\n or \n/X_0_0 SBIN\nand hit send where SBIN is the NSE stock code.For multiple stocks, you can type in \n/X_0 SBIN,ICICIBANK,OtherStocks\nYou can put in any number of stocks separated by space or comma(,)."
         """Send a message when the command /help is issued."""
         cmdText = f"{cmdText}\nClick /start if you want to restart the session."
         update.message.reply_text(sanitiseTexts(f"Choose an option:\n{cmdText}"), reply_markup=default_markup(user=user), parse_mode="HTML")
@@ -2673,7 +2673,7 @@ def command_handler(update: Update, context: CallbackContext) -> None:
             return START_ROUTES
         else:
             if cmd in ["x"]:
-                cmdText = "For option 0 <Screen stocks by the stock name>, please type in the command in the following format\n/X_0 SBIN or /X_0_0 SBIN and hit send where SBIN is the NSE stock code.For multiple stocks, you can type in /X_0 SBIN,ICICIBANK,OtherStocks . You can put in any number of stocks separated by space or comma(,)."
+                cmdText = "For option 0 [Screen stocks by the stock name], please type in the command in the following format\n/X_0 SBIN or /X_0_0 SBIN and hit send where SBIN is the NSE stock code.For multiple stocks, you can type in /X_0 SBIN,ICICIBANK,OtherStocks . You can put in any number of stocks separated by space or comma(,)."
             """Send a message when the command /help is issued."""
             cmdText = f"{cmdText}\nClick /start if you want to restart the session."
             update.message.reply_text(sanitiseTexts(f"Choose an option:\n{cmdText}"), reply_markup=default_markup(user=user), parse_mode="HTML")
@@ -2779,7 +2779,7 @@ def command_handler(update: Update, context: CallbackContext) -> None:
             elif (
                 "x_" in cmd and selectedMenu.menuKey == "0"
             ):  # a specific stock by name
-                cmdText = "For option 0 <Screen stocks by the stock name>, please type in the command in the following format\n/X_0 SBIN or /X_0_0 SBIN and hit send where SBIN is the NSE stock code.For multiple stocks, you can type in /X_0 SBIN,ICICIBANK,OtherStocks. You can put in any number of stocks separated by space or comma(,)."
+                cmdText = "For option 0 [Screen stocks by the stock name], please type in the command in the following format\n/X_0 SBIN or /X_0_0 SBIN and hit send where SBIN is the NSE stock code.For multiple stocks, you can type in /X_0 SBIN,ICICIBANK,OtherStocks. You can put in any number of stocks separated by space or comma(,)."
                 """Send a message when the command /help is issued."""
                 cmdText = f"{cmdText}\nClick /start if you want to restart the session."
                 update.message.reply_text(sanitiseTexts(f"Choose an option:\n{cmdText}"), reply_markup=default_markup(user=user), parse_mode="HTML")
