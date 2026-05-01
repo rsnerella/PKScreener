@@ -489,7 +489,7 @@ jobs:
       run: |
         ${{ inputs.prerequisites }}
         # pip install libsql
-        /home/runner/work/PKScreener/PKScreener/pkscreenercli_x64.bin ${{ inputs.params }} -p
+        /home/runner/work/PKScreener/PKScreener/pkscreenercli_x64.bin ${{ inputs.params }}
         ${{ inputs.postrun }}
 
     - name: Run Scan on Ubuntu from source with TensorFlow (if required)
@@ -505,5 +505,5 @@ jobs:
       run: |
         ${{ inputs.prerequisites }}
         cd /home/runner/work/PKScreener/PKScreener/
-        python3 pkscreener/pkscreenercli.py ${{ inputs.params }} -p
+        python3 pkscreener/pkscreenercli.py ${{ inputs.params }}
         ${{ inputs.postrun }}
