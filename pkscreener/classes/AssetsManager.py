@@ -92,9 +92,35 @@ class PKAssetsManager:
         Singleton configuration manager for application settings
     """
     
+    # Add cache at class level
+    _stock_code_cache = {}
+    _stock_code_cache_time = {}
+    
     fetcher = Fetcher.screenerStockDataFetcher()
     configManager = ConfigManager.tools()
     configManager.getConfig(ConfigManager.parser)
+
+    @staticmethod
+    def get_cached_stock_codes(indexOption, force_refresh=False):
+        """Get cached stock codes for an index option."""
+        import time
+        cache_key = f"stock_codes_{indexOption}"
+        cache_ttl = 300  # 5 minute cache
+        
+        if (not force_refresh and 
+            cache_key in PKAssetsManager._stock_code_cache and 
+            cache_key in PKAssetsManager._stock_code_cache_time and
+            time.time() - PKAssetsManager._stock_code_cache_time[cache_key] < cache_ttl):
+            return PKAssetsManager._stock_code_cache[cache_key]
+        
+        # Fetch fresh
+        from pkscreener.classes.Fetcher import screenerStockDataFetcher
+        fetcher = screenerStockDataFetcher()
+        stock_codes = fetcher.fetchStockCodes(indexOption, stockCode=None)
+        
+        PKAssetsManager._stock_code_cache[cache_key] = stock_codes
+        PKAssetsManager._stock_code_cache_time[cache_key] = time.time()
+        return stock_codes
 
     @staticmethod
     def is_data_fresh(stock_data, max_stale_trading_days=1):
@@ -127,7 +153,16 @@ class PKAssetsManager:
         try:
             from datetime import datetime
             from PKDevTools.classes.PKDateUtilities import PKDateUtilities
-            
+            # Fast path if we know it's from today
+            # Check if data is from today quickly
+            if isinstance(stock_data, dict) and 'index' in stock_data:
+                index = stock_data['index']
+                if index:
+                    last_index = str(index[-1])
+                    if len(last_index) >= 10:
+                        today_str = PKDateUtilities.currentDateTime().strftime('%Y-%m-%d')
+                        if last_index[:10] == today_str:
+                            return True, datetime.strptime(today_str, '%Y-%m-%d').date(), 0
             # Get the last trading date (accounts for weekends and holidays)
             last_trading_date = PKDateUtilities.tradingDate()
             if isinstance(last_trading_date, datetime):
