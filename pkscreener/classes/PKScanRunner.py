@@ -127,7 +127,7 @@ class PKScanRunner:
         tasks_queue = multiprocessing.JoinableQueue()
         results_queue = multiprocessing.Queue()
         logging_queue = multiprocessing.Queue()
-
+        cpu_count = multiprocessing.cpu_count()
         # OPTIMIZATION: For specific stock scans with known stockCodes, use fewer consumers
         # Process creation overhead is significant; fewer consumers = faster startup
         if userPassedArgs and getattr(userPassedArgs, 'stocklist', None):
@@ -147,7 +147,7 @@ class PKScanRunner:
         # Process creation overhead increases significantly with more consumers
         # On Mac, creating more than 4 processes takes ~2s each
         # On Windows/Linux, similar overhead exists but slightly less
-        max_consumers = 4
+        max_consumers = max(2, cpu_count // 2) if sys.platform.startswith('win') else (max(2, int(cpu_count * 0.66)) if sys.platform.startswith('darwin') else cpu_count)
         if totalConsumers > max_consumers:
             default_logger().debug(f"Capping consumers from {totalConsumers} to {max_consumers} for faster startup")
             totalConsumers = max_consumers
