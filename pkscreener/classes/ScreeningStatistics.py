@@ -4196,27 +4196,67 @@ class ScreeningStatistics:
         self, df, screenDict, saveDict, stockName=None, window=3, percentageFromTop=3
     ):
         """
+        Validate Volatility Contraction Pattern (VCP) - Mark Minervini style.
+        
+        A VCP is characterized by:
+        1. Series of peaks and troughs with decreasing amplitude
+        2. Progressive tightening (each pullback is smaller than previous)
+        3. Rising lows (higher lows indicating support)
+        4. Volume contraction during pullbacks
+        5. Price near all-time highs
+        
+        The 3-2-1 Tightening Rule (when enableAdditionalVCPFilters is True):
+        - Leg 2 pullback must be ≤ 70% of Leg 1 pullback
+        - Leg 3 pullback must be ≤ 70% of Leg 2 pullback
+        Example: 20% → 14% (70% of 20) → 10% (71% of 14)
+        This creates the characteristic "tightening" pattern.
+        
         Args:
             df: DataFrame in descending order (newest first, oldest last)
+                Required columns: 'open', 'high', 'low', 'close', 'volume'
+            screenDict: Dictionary to store formatted results for screen display
+            saveDict: Dictionary to store raw results for persistence
+            stockName: Name of the stock (for logging)
+            window: Window size for finding local extrema (default: 3)
+            percentageFromTop: Percentage threshold for top tightening (default: 3%)
+        
+        Returns:
+            bool: True if VCP pattern is detected, False otherwise
         """
         if df is None or len(df) == 0:
             return False
+        
         data = df.copy()
+        
         try:
+            # =====================================================================
+            # STEP 1: OPTIONAL EMA FILTERS
+            # Ensures stock is above key moving averages (bullish condition)
+            # =====================================================================
             if self.configManager.enableAdditionalVCPEMAFilters:
                 reversedData = data[::-1] 
                 ema = pktalib.EMA(reversedData["close"], timeperiod=50)
                 sema20 = pktalib.EMA(reversedData["close"], timeperiod=20)
-                if not (data["close"].iloc[0] >= ema.tail(1).iloc[0] and data["close"].iloc[0] >= sema20.tail(1).iloc[0]):
+                if not (data["close"].iloc[0] >= ema.tail(1).iloc[0] and 
+                        data["close"].iloc[0] >= sema20.tail(1).iloc[0]):
                     return False
+            
+            # =====================================================================
+            # STEP 2: DETECT PEAKS (TOPS) AND TROUGHS (BOTS)
+            # =====================================================================
             percentageFromTop /= 100
             data.reset_index(inplace=True)
             data.rename(columns={"index": "Date"}, inplace=True)
             
-            # Get tops and bots - using more than 4 for better pattern detection
-            top_indices = list(pktalib.argrelextrema(np.array(data["high"]), np.greater_equal, order=window)[0])
+            # Find local maxima (peaks) and minima (troughs)
+            top_indices = list(pktalib.argrelextrema(
+                np.array(data["high"]), np.greater_equal, order=window
+            )[0])
             data["tops"] = data["high"].iloc[top_indices].head(6)  # Look at up to 6 tops
-            bot_indices = list(pktalib.argrelextrema(np.array(data["low"]), np.less_equal, order=window)[0])
+            
+            bot_indices = list(pktalib.argrelextrema(
+                np.array(data["low"]), np.less_equal, order=window
+            )[0])
             data["bots"] = data["low"].iloc[bot_indices].head(6)
             
             data = data.fillna(0)
@@ -4227,26 +4267,36 @@ class ScreeningStatistics:
             # Need at least 3 tops for a meaningful VCP pattern
             if len(tops) < 3:
                 return False
-                
+            
+            # =====================================================================
+            # STEP 3: ALL-TIME HIGH PROXIMITY CHECK
+            # =====================================================================
             highestTop = round(tops.describe()["high"]["max"], 1)
             allTimeHigh = max(data["high"])
-            withinATHRange = data["close"].iloc[0] >= (allTimeHigh - allTimeHigh * float(self.configManager.vcpRangePercentageFromTop)/100)
+            withinATHRange = data["close"].iloc[0] >= (
+                allTimeHigh - allTimeHigh * float(self.configManager.vcpRangePercentageFromTop) / 100
+            )
             
             if not withinATHRange and self.configManager.enableAdditionalVCPFilters:
                 # Last close is not within all time high range
                 return False
             
-            # Calculate how many of the most recent tops are within the percentage range
-            # This is more important than older tops for VCP pattern
+            # =====================================================================
+            # STEP 4: TOP TIGHTENING ANALYSIS
+            # Check if recent tops are within percentage range (clustering)
+            # =====================================================================
             recent_tops_count = min(3, len(tops))
             recent_tops = tops.tail(recent_tops_count)
             tops_in_range = recent_tops[recent_tops.tops > (highestTop - (highestTop * percentageFromTop))]
             
-            # At least 66% of recent tops should be tightening
-            if len(tops_in_range) / recent_tops_count < 0.66: # .66 or 2 out of 3
+            # At least 66% of recent tops should be tightening (2 out of 3)
+            if len(tops_in_range) / recent_tops_count < 0.66:
                 return False
             
-            # Calculate low points between tops for contraction analysis
+            # =====================================================================
+            # STEP 5: LOW POINT ANALYSIS (RISING LOWS)
+            # Calculate low points between successive tops
+            # =====================================================================
             lowPoints = []
             
             for i in range(len(tops) - 1):
@@ -4260,103 +4310,294 @@ class ScreeningStatistics:
             if len(lowPoints) < 2:
                 return False
             
-            # Check if low points are rising (higher lows - indicating contraction)
+            # Check if low points are rising (higher lows = bullish contraction)
             rising_lows = all(lowPoints[i] < lowPoints[i+1] for i in range(len(lowPoints)-1))
             
             # Check if the last 2-3 low points are rising
-            recent_lows_rising = all(lowPoints[i] < lowPoints[i+1] for i in range(-min(2, len(lowPoints)-1), -1)) if len(lowPoints) >= 2 else False
+            recent_lows_rising = all(
+                lowPoints[i] < lowPoints[i+1] 
+                for i in range(-min(2, len(lowPoints)-1), -1)
+            ) if len(lowPoints) >= 2 else False
             
             ltp = data.head(1)["close"].iloc[0]
             
-            # Valid VCP requires: tightening tops AND rising lows AND price below highest top but above recent lows
-            if (rising_lows or recent_lows_rising) and ltp < highestTop and ltp > lowPoints[-1]:
-                saved = self.findCurrentSavedValue(screenDict, saveDict, "Pattern")
-                isTightening, consolidations, deviationScore = self.validateConsolidationContraction(
-                    df=df.copy(),
-                    legsToCheck=(int(self.configManager.vcpLegsToCheckForConsolidation) if self.configManager.enableAdditionalVCPFilters else 0),
-                    stockName=stockName
-                )
-                consolidations = [f"{str(x)}%" for x in consolidations]
-                
-                if isTightening:
-                    screenDict["Pattern"] = (
-                        saved[0] 
-                        + colorText.GREEN
-                        + f"VCP (BO: {highestTop}, Cons.:{','.join(consolidations)})"
-                        + colorText.END
-                    )
-                    saveDict["Pattern"] = saved[1] + f"VCP (BO: {highestTop}, Cons.:{','.join(consolidations)})"
-                    screenDict["deviationScore"] = deviationScore
-                    saveDict["deviationScore"] = deviationScore
-                    return True
+            # =====================================================================
+            # STEP 6: PRICE POSITION VALIDATION
+            # Price must be below highest top (not breaking out yet)
+            # but above the most recent low point (support)
+            # =====================================================================
+            if not ((rising_lows or recent_lows_rising) and ltp < highestTop and ltp > lowPoints[-1]):
+                return False
+            
+            # =====================================================================
+            # STEP 7: 3-2-1 TIGHTENING RULE (when additional filters enabled)
+            # This is the progressive contraction that defines a true VCP
+            # =====================================================================
+            if self.configManager.enableAdditionalVCPFilters:
+                # Calculate pullback percentages from tops
+                pullback_percentages = []
+                for i in range(1, len(tops)):
+                    prev_top = tops.iloc[i-1]["tops"]
+                    current_top = tops.iloc[i]["tops"]
                     
+                    # Find lowest point between these two tops
+                    start_idx = tops.iloc[i-1].name  # Using index position
+                    end_idx = tops.iloc[i].name
+                    
+                    if start_idx < end_idx:
+                        lowest_in_between = min(data.iloc[start_idx:end_idx+1]["low"])
+                        # Calculate pullback percentage from previous peak
+                        pullback_pct = ((prev_top - lowest_in_between) / prev_top) * 100
+                        pullback_percentages.append(pullback_pct)
+                
+                # Apply 3-2-1 Tightening Rule
+                # Each pullback should be ≤70% of the previous pullback
+                if len(pullback_percentages) >= 2:
+                    rule_passed = True
+                    rule_details = []
+                    
+                    for i in range(1, len(pullback_percentages)):
+                        prev = pullback_percentages[i-1]
+                        curr = pullback_percentages[i]
+                        ratio = curr / prev if prev > 0 else 1
+                        
+                        if ratio <= float(self.configManager.vcp321RulePullbackPercentage) / 100 or self.configManager.vcp321RulePullbackPercentage == 0 or self.configManager.vcp321RulePullbackPercentage == 100:
+                            rule_details.append(f"✓ Leg {i+1}: {curr:.1f}% ≤ {self.configManager.vcp321RulePullbackPercentage}% of {prev:.1f}%")
+                        else:
+                            rule_passed = False
+                            rule_details.append(f"✗ Leg {i+1}: {curr:.1f}% > {self.configManager.vcp321RulePullbackPercentage}% of {prev:.1f}%")
+                            break
+                    
+                    if not rule_passed:
+                        # Log the failure for debugging
+                        if stockName:
+                            self.default_logger.debug(
+                                f"{stockName}: 3-2-1 tightening rule failed - {', '.join(rule_details)}"
+                            )
+                        return False
+                    
+                    # Log successful tightening for debugging
+                    if stockName and len(pullback_percentages) >= 2:
+                        self.default_logger.debug(
+                            f"{stockName}: 3-2-1 tightening passed - "
+                            f"Pullbacks: {' → '.join([f'{p:.1f}%' for p in pullback_percentages[:3]])}"
+                        )
+            
+            # =====================================================================
+            # STEP 8: VALIDATE CONSOLIDATION CONTRACTION
+            # =====================================================================
+            saved = self.findCurrentSavedValue(screenDict, saveDict, "Pattern")
+            isTightening, consolidations, deviationScore = self.validateConsolidationContraction(
+                df=df.copy(),
+                legsToCheck=(
+                    int(self.configManager.vcpLegsToCheckForConsolidation) 
+                    if self.configManager.enableAdditionalVCPFilters else 0
+                ),
+                stockName=stockName
+            )
+            consolidations = [f"{str(x)}%" for x in consolidations]
+            
+            if isTightening:
+                screenDict["Pattern"] = (
+                    saved[0] 
+                    + colorText.GREEN
+                    + f"VCP (BO: {highestTop}, Cons.:{','.join(consolidations)})"
+                    + colorText.END
+                )
+                saveDict["Pattern"] = saved[1] + f"VCP (BO: {highestTop}, Cons.:{','.join(consolidations)})"
+                screenDict["deviationScore"] = deviationScore
+                saveDict["deviationScore"] = deviationScore
+                return True
+                
             return False
-        except KeyboardInterrupt: # pragma: no cover
+            
+        except KeyboardInterrupt:
             raise KeyboardInterrupt
-        except Exception as e:  # pragma: no cover
+        except Exception as e:
             self.default_logger.debug(e, exc_info=True)
-        return False
+            return False
 
     # Validate VCP as per Mark Minervini
     # https://chartink.com/screener/volatility-compression
-    def validateVCPMarkMinervini(self, df:pd.DataFrame, screenDict, saveDict):
-        if df is None or len(df) == 0:
+    def validateVCPMarkMinervini(self, df: pd.DataFrame, screenDict, saveDict):
+        """
+        Validate Mark Minervini's VCP (Volatility Contraction Pattern) criteria.
+        
+        Key Elements:
+        1. Uptrend: Price above key MAs with MA alignment (EMA13 > EMA26 > SMA50)
+        2. Tightening: Each pullback is ≤70% of previous pullback
+        3. Volume contraction: Volume dries up during pullbacks
+        4. Pivot: Breakout attempt on above-average volume
+        
+        Args:
+            df: Daily OHLCV data (newest first)
+            screenDict: Dictionary for screen display
+            saveDict: Dictionary for saving results
+            
+        Returns:
+            bool: True if VCP pattern detected
+        """
+        if df is None or len(df) < 90:  # Minervini needs ~1 year of data
             return False
+        
         data = df.copy()
         ohlc_dict = {
-            "open":'first',
-            "high":'max',
-            "low":'min',
-            "close":'last',
-            "volume":'sum'
+            "open": 'first',
+            "high": 'max',
+            "low": 'min',
+            "close": 'last',
+            "volume": 'sum'
         }
-        # final_df = df.resample('W-FRI', closed='left').agg(ohlc_dict).shift('1d')
-        weeklyData = data.resample('W').agg(ohlc_dict)
-        reversedData = data[::-1]  # Reverse the dataframe
-        recent_close = data["close"].head(1).iloc[0]
-        w_ema_13 = pktalib.EMA(weeklyData["close"],timeperiod=13).tail(1).iloc[0]
-        w_ema_26 = pktalib.EMA(weeklyData["close"],timeperiod=26).tail(1).iloc[0]
-        w_sma_50 = pktalib.SMA(weeklyData["close"],timeperiod=50).tail(1).iloc[0]
-        w_sma_40 = pktalib.SMA(weeklyData["close"],timeperiod=40).tail(1).iloc[0]
-        w_sma_40_5w_ago = pktalib.SMA(weeklyData.head(len(weeklyData)-5)["close"],timeperiod=40).tail(1).iloc[0]
-        w_min_50 = min(1.3*weeklyData.tail(50)["low"])
-        w_max_50 = max(0.75*weeklyData.tail(50)["high"])
-        w_ema_26_20w_ago = pktalib.EMA(weeklyData.head(len(weeklyData)-20)["close"],timeperiod=26).tail(1).iloc[0]
-        recent_ema_13_20d_ago = pktalib.EMA(reversedData.head(len(reversedData)-20)["close"],timeperiod=13).tail(1).iloc[0]
-        w_sma_40_5w_ago = pktalib.SMA(weeklyData.head(len(weeklyData)-5)["close"],timeperiod=40).tail(1).iloc[0]
-        w_sma_40_10w_ago = pktalib.SMA(weeklyData.head(len(weeklyData)-10)["close"],timeperiod=40).tail(1).iloc[0]
-        recent_sma_50 = pktalib.SMA(reversedData["close"],timeperiod=50).tail(1).iloc[0]
-        w_wma_8 = pktalib.WMA(weeklyData["close"],timeperiod=8).tail(1).iloc[0]
-        w_sma_8 = pktalib.SMA(weeklyData["close"],timeperiod=8).tail(1).iloc[0]
-        numPreviousCandles = 20
-        pullbackData = data.head(numPreviousCandles)
-        pullbackData.loc[:,'PullBack'] = pullbackData["close"].lt(pullbackData["open"]) #.shift(periods=1)) #& data["low"].lt(data["low"].shift(periods=1))
-        shrinkedVolData = pullbackData[pullbackData["PullBack"] == True].head(numPreviousCandles)
-        recentLargestVolume = max(pullbackData[pullbackData["PullBack"] == False].head(3)["volume"])
-        # pullbackData.loc[:,'PBVolRatio'] = pullbackData["volume"]/recentLargestVolume
-        volInPreviousPullbacksShrinked = False
-        if not shrinkedVolData.empty:
-            index = 0
-            while index < len(shrinkedVolData):
-                volInPreviousPullbacksShrinked = shrinkedVolData["volume"].iloc[index] < self.configManager.vcpVolumeContractionRatio * recentLargestVolume
-                if not volInPreviousPullbacksShrinked:
-                    break
-                index += 1
-        recentVolumeHasAboveAvgVol = recentLargestVolume >= self.configManager.volumeRatio * data["VolMA"].iloc[0]
-        isVCP = w_ema_13 > w_ema_26 and \
-                w_ema_26 > w_sma_50 and \
-                w_sma_40 > w_sma_40_5w_ago and \
-                recent_close >= w_min_50 and \
-                recent_close >= w_max_50 and \
-                recent_ema_13_20d_ago > w_ema_26_20w_ago and \
-                w_sma_40_5w_ago > w_sma_40_10w_ago and \
-                recent_close > recent_sma_50 and \
-                (w_wma_8 - w_sma_8)*6/29 < 0.5 and \
-                volInPreviousPullbacksShrinked and \
-                recentVolumeHasAboveAvgVol and \
-                recent_close > 10
-        if isVCP:
+        
+        # Weekly timeframe for trend analysis
+        weeklyData = data.resample('W-FRI').agg(ohlc_dict)
+        weeklyData = weeklyData.dropna()
+        
+        if len(weeklyData) < 50:
+            return False
+        
+        # =========================================================
+        # PART 1: TREND ANALYSIS (Minervini's "Stage 2" Uptrend)
+        # =========================================================
+        try:
+            w_ema_13 = pktalib.EMA(weeklyData["close"], timeperiod=13).tail(1).iloc[0]
+            w_ema_26 = pktalib.EMA(weeklyData["close"], timeperiod=26).tail(1).iloc[0]
+            w_sma_50 = pktalib.SMA(weeklyData["close"], timeperiod=50).tail(1).iloc[0]
+        except:
+            return False
+        
+        # Uptrend condition: 13EMA > 26EMA > 50SMA
+        if not (w_ema_13 > w_ema_26 > w_sma_50):
+            return False
+        
+        current_price = data["close"].iloc[0]
+        
+        # =========================================================
+        # PART 2: DETECT SWING HIGHS AND MEASURE PULLBACKS
+        # =========================================================
+        # Find swing highs (peaks) using argrelextrema
+        from scipy.signal import argrelextrema
+        import numpy as np
+        
+        highs = data['high'].values
+        lows = data['low'].values
+        closes = data['close'].values
+        
+        # Find local maxima (peaks) over 10-day window
+        window = 10
+        peak_indices = argrelextrema(highs, np.greater_equal, order=window)[0]
+        trough_indices = argrelextrema(lows, np.less_equal, order=window)[0]
+        
+        # Filter to last 90 days only
+        peak_indices = [i for i in peak_indices if i < 90]
+        trough_indices = [i for i in trough_indices if i < 90]
+        
+        if len(peak_indices) < 3:
+            return False
+        
+        # Get most recent 4 peaks
+        peaks = [(idx, highs[idx]) for idx in peak_indices[-4:]]
+        
+        # Measure pullback percentages between peaks
+        pullbacks = []
+        for i in range(1, len(peaks)):
+            prev_peak_price = peaks[i-1][1]
+            current_peak_price = peaks[i][1]
+            
+            # Find lowest point between these two peaks
+            start_idx = peaks[i-1][0]
+            end_idx = peaks[i][0]
+            if start_idx < end_idx:
+                lowest_in_between = min(lows[start_idx:end_idx+1])
+                pullback_pct = ((prev_peak_price - lowest_in_between) / prev_peak_price) * 100
+                pullbacks.append(pullback_pct)
+        
+        # Need at least 2 pullbacks for valid VCP
+        if len(pullbacks) < 2:
+            return False
+        
+        # =========================================================
+        # PART 3: PROGRESSIVE TIGHTENING CHECK (70% RULE)
+        # =========================================================
+        is_tightening = True
+        tightening_details = []
+        
+        for i in range(1, len(pullbacks)):
+            prev = pullbacks[i-1]
+            current = pullbacks[i]
+            ratio = current / prev if prev > 0 else 1
+            
+            if ratio <= 0.70:
+                tightening_details.append(f"Leg {i}: {current:.1f}% ≤ 70% of {prev:.1f}% ✓")
+            else:
+                is_tightening = False
+                tightening_details.append(f"Leg {i}: {current:.1f}% > 70% of {prev:.1f}% ✗")
+                break
+        
+        if not is_tightening:
+            return False
+        
+        # =========================================================
+        # PART 4: VOLUME CONTRACTION DURING PULLBACKS
+        # =========================================================
+        # Volume should dry up significantly during pullbacks
+        has_volume_contraction = True
+        
+        # Get average volume on up days vs down days in recent pullback
+        last_peak_idx = peaks[-1][0]
+        if last_peak_idx + 10 < len(data):
+            # Check volume in last pullback
+            pullback_start = peaks[-2][0] if len(peaks) >= 2 else 0
+            pullback_end = last_peak_idx
+            
+            if pullback_start < pullback_end:
+                pullback_volumes = data['volume'].iloc[pullback_start:pullback_end+1]
+                avg_pullback_volume = pullback_volumes.mean()
+                
+                # Get average volume on up days in last 10 days
+                up_day_volumes = data['volume'].iloc[:10][data['close'].iloc[:10] > data['close'].shift(1).iloc[:10]]
+                avg_up_volume = up_day_volumes.mean() if len(up_day_volumes) > 0 else avg_pullback_volume
+                
+                if avg_pullback_volume and avg_up_volume:
+                    vol_ratio = avg_pullback_volume / avg_up_volume
+                    if vol_ratio > 0.7:  # Pullback volume should be less than 70% of up-day volume
+                        has_volume_contraction = False
+        
+        # =========================================================
+        # PART 5: ABOVE-AVERAGE VOLUME ON RECENT UPTICK
+        # =========================================================
+        recent_avg_volume = data['volume'].iloc[1:11].mean()
+        current_volume = data['volume'].iloc[0]
+        has_recent_volume_surge = current_volume > recent_avg_volume * 1.2
+        
+        # =========================================================
+        # PART 6: PRICE POSITION (near recent high, not extended)
+        # =========================================================
+        recent_high = max(highs[:20])  # Highest in last 20 days
+        price_position = (current_price / recent_high) * 100 if recent_high > 0 else 0
+        
+        # Price should be within 10% of recent high (not extended)
+        is_near_high = price_position > 90
+        
+        # Price should be above key moving averages
+        sma_50 = pktalib.SMA(data['close'], timeperiod=50).tail(1).iloc[0]
+        sma_150 = pktalib.SMA(data['close'], timeperiod=150).tail(1).iloc[0]
+        sma_200 = pktalib.SMA(data['close'], timeperiod=200).tail(1).iloc[0]
+        
+        above_key_ma = current_price > sma_50 > sma_150 > sma_200
+        
+        # =========================================================
+        # PART 7: FINAL VALIDATION
+        # =========================================================
+        is_vcp = (is_tightening and 
+                is_near_high and 
+                above_key_ma and 
+                has_recent_volume_surge and
+                has_volume_contraction)
+        
+        if is_vcp:
             saved = self.findCurrentSavedValue(screenDict, saveDict, "Pattern")
+            tightening_str = " → ".join([f"{p:.1f}%" for p in pullbacks[:3]])
             screenDict["Pattern"] = (
                 saved[0] 
                 + colorText.GREEN
@@ -4364,7 +4605,9 @@ class ScreeningStatistics:
                 + colorText.END
             )
             saveDict["Pattern"] = saved[1] + f"VCP(Minervini)"
-        return isVCP
+            saveDict["Pattern_Details"] = f"Pullbacks: {tightening_str}"
+        
+        return is_vcp
 
     # Validate if volume of last day is higher than avg
     def validateVolume(
