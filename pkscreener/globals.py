@@ -1500,7 +1500,7 @@ def main(userArgs=None, optionalFinalOutcome_df=None):
         missingStocks = set(listStockCodes) - set([ x.replace("-BE","").replace("-BZ","") for x in savedOrDownloadedKeys ])
         # print(missingStocks)
         # default_logger().debug(missingStocks)
-        OutputControls().printOutput(f"{colorText.GREEN}  [+] Adding {len(savedOrDownloadedKeys)-len(missingStocks)} stocks out of {len(savedOrDownloadedKeys)} to the queue...{colorText.END}")
+        OutputControls().printOutput(f"{colorText.GREEN}  [+] Adding {len(savedOrDownloadedKeys)+1-len(missingStocks)} stocks out of {len(savedOrDownloadedKeys)} to the queue...{colorText.END}")
         listStockCodes = list(set(savedOrDownloadedKeys)-set(missingStocks)) if not downloadOnly else savedOrDownloadedKeys
         if downloadOnly:
             OutputControls().printOutput(

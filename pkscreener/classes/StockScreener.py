@@ -837,7 +837,7 @@ class StockScreener:
 
     def performValidityCheckForExecuteOptions(self,executeOption,screener,fullData,screeningDictionary,saveDictionary,processedData,configManager,subMenuOption=3,intraday_data=None):
         isValid = True
-        if executeOption not in [11,12,13,14,15,16,17,18,19,20,23,24,25,27,28,30,31,32,33,34,35,36,37,38,39,42,43,44,45,46,47]:
+        if executeOption not in [11,12,13,14,15,16,17,18,19,20,23,24,25,27,28,30,31,32,33,34,35,36,37,38,39,42,43,44,45,46,47,48,49]:
             return True
         if executeOption == 11:
             isValid = screener.validateShortTermBullish(
@@ -856,9 +856,9 @@ class StockScreener:
         elif executeOption == 15:
             isValid = screener.find52WeekLowBreakout(fullData)
         elif executeOption == 16:
-            isValid = screener.find10DaysLowBreakout(fullData)
+            isValid = screener.find10DaysLowBreakout(fullData, screeningDictionary, saveDictionary)
         elif executeOption == 17:
-            isValid = screener.find52WeekHighBreakout(fullData)
+            isValid = screener.find52WeekHighBreakout(fullData, screeningDictionary, saveDictionary)
         elif executeOption == 18:
             isValid = screener.findAroonBullishCrossover(fullData)
         elif executeOption == 19:
@@ -914,6 +914,10 @@ class StockScreener:
             isValid = screener.findAllBuySignals(fullData, screeningDictionary, saveDictionary)
         elif executeOption == 47:  # All Sell Signals
             isValid = screener.findAllSellSignals(fullData, screeningDictionary, saveDictionary)
+        elif executeOption == 48:
+            isValid = screener.find10DaysHighBreakout(fullData, screeningDictionary, saveDictionary)
+        elif executeOption == 49:
+            isValid = screener.find52WeekHighApproachingBreakout(fullData, screeningDictionary, saveDictionary)
         return isValid        
                     
     def performBasicVolumeChecks(self, executeOption, volumeRatio, screeningDictionary, saveDictionary, processedData, configManager, screener):

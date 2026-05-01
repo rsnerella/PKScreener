@@ -236,21 +236,294 @@ class ScreeningStatistics:
                 #     self.default_logger.debug(e, exc_info=True)
                 continue
 
-    # Find stocks that have broken through 52 week high.
-    def find52WeekHighBreakout(self, df):
-        # https://chartink.com/screener/52-week-low-breakout
+    # Find stocks that have broken through 52 week high with quality confirmation
+    def find52WeekHighBreakout(self, df, screenDict=None, saveDict=None):
+        """
+        Identify high-quality 52-week high breakout patterns.
+        
+        A genuine 52-week high breakout should have:
+        1. Price closing above previous 52-week high (not just intraday spike)
+        2. Above-average volume confirming institutional interest
+        3. Proper base/consolidation before breakout
+        4. Not already overextended
+        5. Strong relative strength
+        
+        Args:
+            df: DataFrame with OHLCV data (latest first)
+            screenDict: Optional dict for output formatting  
+            saveDict: Optional dict for saving results
+        
+        Returns:
+            bool: True if quality 52-week high breakout detected
+        """
         if df is None or len(df) == 0:
             return False
+        
         data = df.copy()
         data = data.fillna(0)
         data = data.replace([np.inf, -np.inf], 0)
+        
+        # Need at least 260 days (52 weeks * 5 days) of data
+        if len(data) < 260:
+            return False
+        
+        # Ensure data is sorted with most recent first
+        if not data.empty and hasattr(data.index, 'sort_values'):
+            try:
+                data = data.sort_index(ascending=False)
+            except:
+                pass
+        
         one_week = 5
-        recent = data.head(1)["high"].iloc[0]
-        full52Week = data.head(50 * one_week)
-        full52WeekHigh = full52Week["high"].max()
-        # if self.shouldLog:
-        #     self.default_logger.debug(data.head(10))
-        return recent >= full52WeekHigh
+        week_52 = 50 * one_week  # 250 trading days (approx 52 weeks)
+        
+        today = data.iloc[0]
+        
+        # =============================================================
+        # STEP 1: GET 52-WEEK DATA (excluding today)
+        # =============================================================
+        historical_data = data.iloc[1:week_52 + 1]  # Last 52 weeks excluding today
+        previous_52_week_high = historical_data["high"].max()
+        previous_52_week_close_high = historical_data["close"].max()
+        
+        if previous_52_week_high == 0:
+            return False
+        
+        # =============================================================
+        # STEP 2: PRIMARY BREAKOUT CONDITIONS
+        # =============================================================
+        
+        # Condition 1: Close above previous 52-week high (more reliable than intraday high)
+        close_breakout = today["close"] > previous_52_week_high
+        
+        # Alternative: Allow high breakout if close is very close (within 0.5%)
+        high_breakout = today["high"] > previous_52_week_high
+        close_near_high = (today["close"] / previous_52_week_high) > 0.995 if previous_52_week_high > 0 else False
+        
+        price_breakout = close_breakout or (high_breakout and close_near_high)
+        
+        if not price_breakout:
+            return False
+        
+        # =============================================================
+        # STEP 3: VOLUME CONFIRMATION (Critical for breakouts)
+        # =============================================================
+        
+        # Calculate volume averages
+        avg_volume_20 = data.iloc[1:21]["volume"].mean() if len(data) > 20 else 0
+        avg_volume_50 = data.iloc[1:51]["volume"].mean() if len(data) > 50 else 0
+        avg_volume_10 = data.iloc[1:11]["volume"].mean() if len(data) > 10 else 0
+        
+        # Volume should be significantly above average on breakout day
+        volume_ratio_vs_20 = today["volume"] / avg_volume_20 if avg_volume_20 > 0 else 1
+        volume_ratio_vs_50 = today["volume"] / avg_volume_50 if avg_volume_50 > 0 else 1
+        volume_ratio_vs_10 = today["volume"] / avg_volume_10 if avg_volume_10 > 0 else 1
+        
+        # Quality breakout needs volume at least 1.5x the 50-day average
+        volume_confirmation = (
+            volume_ratio_vs_50 >= 1.5 or 
+            (volume_ratio_vs_20 >= 1.3 and today["volume"] > 100000)  # For liquid stocks
+        )
+        
+        # =============================================================
+        # STEP 4: CONSOLIDATION/BASE CHECK (Avoid extended moves)
+        # =============================================================
+        
+        # Check if stock has been consolidating near highs (not already extended)
+        days_to_check = min(60, len(historical_data))
+        recent_highs = historical_data["high"].iloc[:days_to_check]
+        recent_high_max = recent_highs.max()
+        
+        # Calculate how close recent prices are to 52-week high
+        # A good setup has price within 10-15% of 52-week high before breakout
+        price_proximity = (previous_52_week_high - historical_data["close"].iloc[0]) / previous_52_week_high if previous_52_week_high > 0 else 1
+        
+        # Stock should be within 20% of 52-week high (not too far down)
+        consolidation_check = price_proximity <= 0.20
+        
+        # Check for proper base (at least 4 weeks of consolidation)
+        # Look for tight trading range in last 20 days
+        last_20_days = historical_data.iloc[:20]
+        if len(last_20_days) >= 20:
+            price_range_pct = (last_20_days["high"].max() - last_20_days["low"].min()) / last_20_days["low"].min() * 100
+            tight_base = price_range_pct <= 15  # Less than 15% range indicates consolidation
+        else:
+            tight_base = True
+        
+        # =============================================================
+        # STEP 5: RELATIVE STRENGTH CHECK
+        # =============================================================
+        
+        # Stock should show strength relative to its own history
+        # Check if stock is making higher highs recently
+        last_10_highs = historical_data["high"].iloc[:10]
+        higher_highs_trend = all(
+            last_10_highs.iloc[i] > last_10_highs.iloc[i+1] 
+            for i in range(len(last_10_highs) - 1)
+        ) if len(last_10_highs) >= 2 else False
+        
+        # Check RSI if available (should be strong but not extremely overbought)
+        rsi_value = None
+        if 'RSI' in data.columns:
+            rsi_value = data['RSI'].iloc[0]
+        else:
+            # Quick RSI calculation
+            from pkscreener.classes.Pktalib import pktalib
+            rsi_series = pktalib.RSI(data["close"], timeperiod=14)
+            rsi_value = rsi_series.iloc[0] if len(rsi_series) > 0 else None
+        
+        rsi_ok = rsi_value is None or (55 <= rsi_value <= 80)  # Strong but not extreme overbought
+        
+        # =============================================================
+        # STEP 6: CANDLE QUALITY CHECK
+        # =============================================================
+        
+        # Bullish candle (close > open)
+        is_bullish = today["close"] > today["open"]
+        
+        # Close in top 40% of daily range (buyer control)
+        daily_range = today["high"] - today["low"]
+        if daily_range > 0:
+            close_position = (today["close"] - today["low"]) / daily_range
+            strong_close = close_position > 0.40
+        else:
+            strong_close = False
+        
+        # Check if it's a fresh breakout (not already up huge today)
+        intraday_move = (today["high"] - today["low"]) / today["low"] * 100 if today["low"] > 0 else 0
+        not_too_extended = intraday_move <= 7  # Less than 7% intraday range
+        
+        # =============================================================
+        # STEP 7: RESISTANCE CHECK (No prior resistance above)
+        # =============================================================
+        
+        # Look for any higher highs in the dataset (ensures it's truly 52-week)
+        all_time_high = data["high"].max()
+        is_all_time_high = today["high"] >= all_time_high - (all_time_high * 0.001) if all_time_high > 0 else False
+        
+        # =============================================================
+        # STEP 8: FINAL QUALITY SCORING
+        # =============================================================
+        
+        # Primary conditions (must have)
+        primary_conditions = [
+            price_breakout,
+            volume_confirmation,
+            consolidation_check,
+            is_bullish or strong_close  # Either condition is acceptable
+        ]
+        
+        # Secondary conditions (at least 2 of 3)
+        secondary_conditions = [
+            tight_base,
+            higher_highs_trend or rsi_ok,  # Either strength indicator
+            not_too_extended
+        ]
+        
+        secondary_score = sum(secondary_conditions)
+        
+        is_quality_breakout = all(primary_conditions) and secondary_score >= 2
+        
+        # =============================================================
+        # STEP 9: STORE RESULTS (if dictionaries provided)
+        # =============================================================
+        
+        if screenDict is not None and saveDict is not None and is_quality_breakout:
+            saved = self.findCurrentSavedValue(screenDict, saveDict, "Pattern")
+            
+            # Build breakout description
+            breakout_type = "ATH" if is_all_time_high else "52WH"
+            volume_multiple = round(volume_ratio_vs_50, 1) if volume_ratio_vs_50 > 0 else 1
+            
+            breakout_details = f"{breakout_type}-BO (H:{previous_52_week_high:.2f}, V:{volume_multiple}x)"
+            
+            if close_breakout:
+                breakout_details += " [Close]"
+            
+            screenDict["Pattern"] = saved[0] + colorText.GREEN + breakout_details + colorText.END
+            saveDict["Pattern"] = saved[1] + breakout_details
+            
+            # Store additional metrics for sorting
+            saveDict["BreakoutStrength"] = volume_multiple
+            saveDict["BreakoutType"] = breakout_type
+        
+        return is_quality_breakout
+
+
+    # Complementary method: Find stocks approaching 52-week high (pre-breakout)
+    def findApproaching52WeekHigh(self, df, screenDict=None, saveDict=None, proximity_pct=5):
+        """
+        Find stocks approaching 52-week high (setups for potential breakout).
+        
+        Useful for finding candidates before the actual breakout.
+        
+        Args:
+            df: DataFrame with OHLCV data (latest first)
+            screenDict: Optional dict for output formatting
+            saveDict: Optional dict for saving results
+            proximity_pct: How close to 52-week high (default 5%)
+        
+        Returns:
+            bool: True if stock is approaching 52-week high with good setup
+        """
+        if df is None or len(df) < 250:
+            return False
+        
+        data = df.copy()
+        data = data.fillna(0)
+        data = data.replace([np.inf, -np.inf], 0)
+        
+        if not data.empty and hasattr(data.index, 'sort_values'):
+            try:
+                data = data.sort_index(ascending=False)
+            except:
+                pass
+        
+        one_week = 5
+        week_52 = 50 * one_week
+        
+        today = data.iloc[0]
+        historical_data = data.iloc[1:week_52 + 1]
+        previous_52_week_high = historical_data["high"].max()
+        
+        if previous_52_week_high == 0:
+            return False
+        
+        # Calculate distance to 52-week high
+        distance_to_high = (previous_52_week_high - today["close"]) / previous_52_week_high * 100
+        
+        # Within specified proximity
+        is_approaching = 0 <= distance_to_high <= proximity_pct
+        
+        if not is_approaching:
+            return False
+        
+        # Check for constructive consolidation (tight range)
+        last_20_days = historical_data.iloc[:20]
+        if len(last_20_days) >= 20:
+            price_range_pct = (last_20_days["high"].max() - last_20_days["low"].min()) / last_20_days["low"].min() * 100
+            tight_consolidation = price_range_pct <= 10  # Very tight for pre-breakout
+        else:
+            tight_consolidation = True
+        
+        # Volume should be drying up (accumulation phase)
+        avg_volume_50 = historical_data["volume"].iloc[:50].mean() if len(historical_data) >= 50 else 0
+        volume_contraction = today["volume"] < avg_volume_50 * 0.8 if avg_volume_50 > 0 else True
+        
+        # Above key moving averages
+        sma_50 = historical_data["close"].iloc[:50].mean() if len(historical_data) >= 50 else 0
+        sma_200 = historical_data["close"].iloc[:200].mean() if len(historical_data) >= 200 else 0
+        above_mas = today["close"] > sma_50 > sma_200 if sma_50 > 0 and sma_200 > 0 else False
+        
+        quality_setup = tight_consolidation and volume_contraction and above_mas
+        
+        if screenDict is not None and saveDict is not None and quality_setup:
+            saved = self.findCurrentSavedValue(screenDict, saveDict, "Pattern")
+            setup_details = f"Approaching-52WH ({distance_to_high:.1f}%)"
+            screenDict["Pattern"] = saved[0] + colorText.WARN + setup_details + colorText.END
+            saveDict["Pattern"] = saved[1] + setup_details
+        
+        return quality_setup
 
     #@measure_time
     # Find stocks' 52 week high/low.
@@ -291,25 +564,210 @@ class ScreeningStatistics:
         # if self.shouldLog:
         #     self.default_logger.debug(data.head(10))
 
-    # Find stocks that have broken through 10 days low.
-    def find10DaysLowBreakout(self, df):
+    # Find stocks that have broken through 10 days low (bearish breakout)
+    def find10DaysLowBreakout(self, df, screenDict=None, saveDict=None):
+        """
+        Identify genuine 10-day low breakout patterns with confirmation.
+        A quality 10-day low breakout should have:
+        1. Price breaking below recent support levels
+        2. Increased volume confirming selling pressure
+        3. Bearish candle confirmation
+        4. Stock not already oversold (avoid false bottoms)
+        
+        Args:
+            df: DataFrame with OHLCV data (latest first)
+            screenDict: Optional dict for output formatting
+            saveDict: Optional dict for saving results
+        
+        Returns:
+            bool: True if quality 10-day low breakout detected
+        """
         if df is None or len(df) == 0:
             return False
+        
         data = df.copy()
         data = data.fillna(0)
         data = data.replace([np.inf, -np.inf], 0)
-        one_week = 5
-        recent = data.head(1)["low"].iloc[0]
-        last1Week = data.head(one_week)
-        last2Week = data.head(2 * one_week)
-        previousWeek = last2Week.tail(one_week)
-        last1WeekLow = last1Week["low"].min()
-        previousWeekLow = previousWeek["low"].min()
-        # if self.shouldLog:
-        #     self.default_logger.debug(data.head(10))
-        return (recent <= min(previousWeekLow, last1WeekLow)) and (
-            last1WeekLow <= previousWeekLow
+        
+        # Need at least 15 days of data for proper analysis (10 days + buffer)
+        if len(data) < 15:
+            return False
+        
+        # Ensure data is sorted with most recent first
+        if not data.empty and hasattr(data.index, 'sort_values'):
+            try:
+                data = data.sort_index(ascending=False)
+            except:
+                pass
+        
+        # Get recent data
+        today = data.iloc[0]
+        yesterday = data.iloc[1] if len(data) > 1 else None
+        
+        if yesterday is None:
+            return False
+        
+        # Calculate 10-day low (excluding today)
+        ten_day_data = data.iloc[1:11]  # Last 10 trading days excluding today
+        ten_day_low = ten_day_data['low'].min() if len(ten_day_data) > 0 else 0
+        ten_day_high = ten_day_data['high'].max() if len(ten_day_data) > 0 else 0
+        
+        # Calculate 5-day average volume for confirmation
+        five_day_avg_volume = data.iloc[1:6]['volume'].mean() if len(data) > 5 else 0
+        
+        # QUALITY BREAKOUT CONDITIONS:
+        
+        # 1. Today's low breaks below 10-day low (actual breakout)
+        price_breakout = today['low'] < ten_day_low
+        
+        if not price_breakout:
+            return False
+        
+        # 2. Volume confirmation - higher volume on breakout day
+        volume_confirmation = today['volume'] > five_day_avg_volume * 1.2
+        
+        # 3. Close is near low of day (seller conviction) - close in bottom 25% of daily range
+        daily_range = today['high'] - today['low']
+        if daily_range > 0:
+            close_position = (today['close'] - today['low']) / daily_range
+            close_confirmation = close_position < 0.25  # Close in bottom 25%
+        else:
+            close_confirmation = False
+        
+        # 4. Not already oversold (avoid chasing extended moves)
+        # Check if RSI exists, if not calculate it
+        rsi_value = None
+        if 'RSI' in data.columns:
+            rsi_value = data['RSI'].iloc[0]
+        else:
+            # Quick RSI calculation for confirmation
+            close_prices = data['close'].iloc[:14].values
+            if len(close_prices) >= 14:
+                from pkscreener.classes.Pktalib import pktalib
+                rsi_series = pktalib.RSI(data['close'], timeperiod=14)
+                rsi_value = rsi_series.iloc[0] if len(rsi_series) > 0 else None
+        
+        # Breakout is more reliable when RSI is between 30-60 (not already oversold)
+        rsi_confirmation = rsi_value is None or (30 <= rsi_value <= 70)
+        
+        # 5. Trend confirmation - price below 20-day SMA (downtrend context)
+        sma_20 = data['close'].iloc[1:21].mean() if len(data) > 20 else 0
+        trend_confirmation = today['close'] < sma_20 if sma_20 > 0 else True
+        
+        # 6. Previous day not already at low (genuine fresh breakdown)
+        fresh_breakout = yesterday['low'] > ten_day_low
+        
+        # Combined quality check
+        is_quality_breakout = (
+            price_breakout and
+            volume_confirmation and
+            close_confirmation and
+            rsi_confirmation and
+            trend_confirmation and
+            fresh_breakout
         )
+        
+        # Optional: Add additional bearish confirmation
+        # Check if today is a bearish candle
+        is_bearish_candle = today['close'] < today['open']
+        
+        # Check if making lower low vs yesterday
+        lower_low = today['low'] < yesterday['low']
+        
+        # Final quality score (at least 3 of 4 additional conditions)
+        additional_conditions = sum([
+            is_bearish_candle,
+            lower_low,
+            today['close'] < yesterday['close'],  # Lower close
+            today['volume'] > yesterday['volume'] * 1.5  # Volume spike
+        ])
+        
+        quality_breakout = is_quality_breakout and additional_conditions >= 2
+        
+        # Store results for display if dictionaries provided
+        if screenDict is not None and saveDict is not None and quality_breakout:
+            saved = self.findCurrentSavedValue(screenDict, saveDict, "Pattern")
+            breakout_details = f"10D-Low-BO (L:{ten_day_low:.2f}, V:{today['volume']/five_day_avg_volume:.1f}x)"
+            screenDict["Pattern"] = saved[0] + colorText.FAIL + breakout_details + colorText.END
+            saveDict["Pattern"] = saved[1] + breakout_details
+        
+        return quality_breakout
+
+
+    # Alternative: Bullish 10-day high breakout (complementary method)
+    def find10DaysHighBreakout(self, df, screenDict=None, saveDict=None):
+        """
+        Identify bullish 10-day high breakout patterns (breakout to upside).
+        Conditions:
+        1. Price breaks above 10-day high
+        2. Volume confirmation
+        3. Close near high of day (buyer conviction)
+        4. Uptrend context
+        """
+        if df is None or len(df) == 0:
+            return False
+        
+        data = df.copy()
+        data = data.fillna(0)
+        data = data.replace([np.inf, -np.inf], 0)
+        
+        if len(data) < 15:
+            return False
+        
+        # Ensure sorted with most recent first
+        if not data.empty and hasattr(data.index, 'sort_values'):
+            try:
+                data = data.sort_index(ascending=False)
+            except:
+                pass
+        
+        today = data.iloc[0]
+        yesterday = data.iloc[1] if len(data) > 1 else None
+        
+        if yesterday is None:
+            return False
+        
+        # Calculate 10-day high (excluding today)
+        ten_day_data = data.iloc[1:11]
+        ten_day_high = ten_day_data['high'].max() if len(ten_day_data) > 0 else 0
+        
+        # Calculate averages
+        five_day_avg_volume = data.iloc[1:6]['volume'].mean() if len(data) > 5 else 0
+        sma_20 = data['close'].iloc[1:21].mean() if len(data) > 20 else 0
+        
+        # Breakout conditions
+        price_breakout = today['high'] > ten_day_high
+        volume_confirmation = today['volume'] > five_day_avg_volume * 1.2
+        
+        # Close in top 25% of daily range (buyer conviction)
+        daily_range = today['high'] - today['low']
+        if daily_range > 0:
+            close_position = (today['close'] - today['low']) / daily_range
+            close_confirmation = close_position > 0.75
+        else:
+            close_confirmation = False
+        
+        # Uptrend context
+        trend_confirmation = today['close'] > sma_20 if sma_20 > 0 else True
+        
+        # Bullish candle
+        is_bullish = today['close'] > today['open']
+        
+        quality_breakout = (
+            price_breakout and
+            volume_confirmation and
+            close_confirmation and
+            trend_confirmation and
+            is_bullish
+        )
+        
+        if screenDict is not None and saveDict is not None and quality_breakout:
+            saved = self.findCurrentSavedValue(screenDict, saveDict, "Pattern")
+            breakout_details = f"10D-High-BO (H:{ten_day_high:.2f}, V:{today['volume']/five_day_avg_volume:.1f}x)"
+            screenDict["Pattern"] = saved[0] + colorText.GREEN + breakout_details + colorText.END
+            saveDict["Pattern"] = saved[1] + breakout_details
+        
+        return quality_breakout
 
     # Find stocks that have broken through 52 week low.
     def find52WeekLowBreakout(self, df):
