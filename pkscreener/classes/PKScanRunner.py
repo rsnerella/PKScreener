@@ -659,7 +659,12 @@ class PKScanRunner:
         
         # OPTIMIZATION: Use a reasonable number of threads for process startup
         # Too many threads can cause contention, too few wastes time
-        max_workers = min(total_workers, os.cpu_count() or 4)
+        if sys.platform.startswith('darwin'):
+            max_workers = min(total_workers, 4)  # Cap at 4 threads on Mac
+        elif sys.platform.startswith('win'):
+            max_workers = min(total_workers, 2)  # Windows needs fewer threads
+        else:
+            max_workers = min(total_workers, os.cpu_count() or 8)
         
         # Start all workers in parallel using threads
         # This is safe because Process.start() is non-blocking and returns quickly
