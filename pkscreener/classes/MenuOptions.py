@@ -297,12 +297,12 @@ level1_S_MenuDict = {
 INDICES_MAP = {}
 
 level1_X_MenuDict = {
-    "0": "Screen stocks by the stock names",
-    "1": "Nifty 50          ",
+    "W": "Screen stocks from my own Watchlist ",
     "N": "Nifty Prediction using Artifical Intelligence (Use for Gap-Up/Gap-Down/BTST/STBT)",
     # "S": "Sectoral Indices",
     # "E": "Live Index Scan : 5 EMA for Intraday",
-    "W": "Screen stocks from my own Watchlist ",
+    "0": "Screen stocks by the stock names",
+    "1": "Nifty 50          ",
     "2": "Nifty Next 50     ",
     "3": "Nifty 100         ",
     "4": "Nifty 200         ",
@@ -918,7 +918,7 @@ class menus:
                 else:
                     # sub-menu of the top level main selected menu
                     return self.renderMenuFromDictionary(dict=level1_X_MenuDict,
-                                                         exceptionKeys= [], #["E", "M", "S", "15"],
+                                                         exceptionKeys= ["N"], #["E", "M", "S", "15"],
                                                          coloredValues= [], #(["15",str(configManager.defaultIndex)] if not asList else []),
                                                          defaultMenu=str(configManager.defaultIndex),
                                                          skip=skip, 

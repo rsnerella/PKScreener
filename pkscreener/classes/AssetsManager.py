@@ -583,7 +583,6 @@ class PKAssetsManager:
         """
         import requests
         import pickle
-        import shutil
         import pandas as pd
         
         try:
@@ -620,8 +619,11 @@ class PKAssetsManager:
                     avg_rows = sum(rows_count) / len(rows_count) if rows_count else 0
                     
                     if avg_rows >= min_rows_required:
-                        shutil.move(temp_path, output_path)
-                        return True, output_path, len(data), avg_rows
+                        try:
+                            shutil.move(temp_path, output_path)
+                            return True, output_path, len(data), avg_rows
+                        except Exception as e:
+                            default_logger().error(f"Error moving file: {e}")
                     else:
                         default_logger().debug(f"Downloaded PKL has insufficient rows (avg {avg_rows:.1f} < {min_rows_required}). Discarding. Sampled symbols rows: {rows_count}")
                         os.remove(temp_path)
@@ -1403,8 +1405,10 @@ class PKAssetsManager:
                 success, github_path, num_instruments = PKAssetsManager.download_fresh_pkl_from_github(intraday=isIntraday)
                 if success and github_path:
                     # Replace local cache with fresh GitHub data
-                    import shutil
-                    shutil.copy(github_path, srcFilePath)
+                    try:
+                        shutil.copy(github_path, srcFilePath)
+                    except Exception as e:
+                        default_logger().error(f"Error copying GitHub data to local cache: {e}")
                     default_logger().info(f"Replaced stale/insufficient local cache with fresh data from GitHub ({num_instruments} instruments)")
                     OutputControls().printOutput(
                         colorText.GREEN
