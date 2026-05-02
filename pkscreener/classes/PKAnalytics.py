@@ -146,7 +146,7 @@ class PKAnalyticsService(SingletonMixin, metaclass=SingletonType):
         self.start_time = time.time()
         self.isRunner = "RUNNER" in os.environ.keys()
         self.onefile = getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS')
-        self.username = self._get_anonymous_id()  # Use anonymous ID instead of username
+        self.username = self.getUserName()
         self.configManager = tools()
         self.configManager.getConfig(parser)
         
@@ -517,8 +517,21 @@ class PKAnalyticsService(SingletonMixin, metaclass=SingletonType):
             pass
 
     def getUserName(self):
-        """Get anonymized user identifier."""
-        return self.username
+        try:
+            username = os.getlogin()
+            if username is None or len(username) == 0:
+                username = os.environ.get('username') if platform.startswith("win") else os.environ.get("USER")
+                if username is None or len(username) == 0:
+                    username = os.environ.get('USERPROFILE')
+                    if username is None or len(username) == 0:
+                        username = os.path.expandvars("%userprofile%") if platform.startswith("win") else getpass.getuser()
+        except KeyboardInterrupt: # pragma: no cover
+            raise KeyboardInterrupt
+        except: # pragma: no cover
+            username = f"NA-{self.os}"
+            pass
+        username = f"{self._get_anonymous_id()}-{username}"  # Use anonymous ID instead of username
+        return username
 
     def getApproxLocationInfo(self, use_cache=True, timeout=2):
         """Get approximate location information."""
@@ -565,16 +578,34 @@ class PKAnalyticsService(SingletonMixin, metaclass=SingletonType):
 
 
 # =============================================================================
-# HELPER DECORATORS FOR EASY TRACKING
+# HELPER DECORATORS FOR EASY TRACKING (Supports instance, class, and static methods)
 # =============================================================================
 
 def track_feature(feature_name):
     """
     Decorator to automatically track feature usage.
     
+    Works with:
+    - Instance methods (takes self)
+    - Class methods (takes cls)  
+    - Static methods (takes no special first arg)
+    
     Usage:
+        # Instance method
         @track_feature("ATR_Trailing_Stop")
-        def my_function():
+        def my_method(self):
+            pass
+        
+        # Class method
+        @classmethod
+        @track_feature("PKUserRegistration.login")
+        def login(cls, trialCount=0):
+            pass
+        
+        # Static method
+        @staticmethod
+        @track_feature("utility_function")
+        def helper_function():
             pass
     """
     def decorator(func):
@@ -605,9 +636,27 @@ def track_performance(operation_name):
     """
     Decorator to automatically track performance.
     
+    Works with:
+    - Instance methods (takes self)
+    - Class methods (takes cls)
+    - Static methods (takes no special first arg)
+    
     Usage:
+        # Instance method
         @track_performance("data_loading")
-        def load_data():
+        def load_data(self):
+            pass
+        
+        # Class method
+        @classmethod
+        @track_performance("PKUserRegistration.login")
+        def login(cls, trialCount=0):
+            pass
+        
+        # Static method
+        @staticmethod
+        @track_performance("helper_calculation")
+        def calculate():
             pass
     """
     def decorator(func):
@@ -627,6 +676,82 @@ def track_performance(operation_name):
                     operation_name,
                     time.time() - start_time,
                     success=False
+                )
+                raise
+        return wrapper
+    return decorator
+
+
+def track_error(error_type=None):
+    """
+    Decorator to automatically track errors in functions.
+    
+    Works with instance, class, and static methods.
+    
+    Usage:
+        @track_error("DatabaseError")
+        def my_function():
+            pass
+    """
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            analytics = PKAnalyticsService()
+            try:
+                return func(*args, **kwargs)
+            except Exception as e:
+                analytics.track_error(
+                    error_type or type(e).__name__,
+                    str(e),
+                    {"function": func.__name__}
+                )
+                raise
+        return wrapper
+    return decorator
+
+
+def track_all(operation_name, feature_name=None):
+    """
+    Combined decorator that tracks both performance and feature usage.
+    
+    Works with instance, class, and static methods.
+    
+    Usage:
+        @track_all("PKUserRegistration.login", "User Login")
+        @classmethod
+        def login(cls):
+            pass
+    """
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            analytics = PKAnalyticsService()
+            start_time = time.time()
+            feature = feature_name or operation_name
+            try:
+                result = func(*args, **kwargs)
+                # Track performance
+                analytics.track_performance(
+                    operation_name,
+                    time.time() - start_time,
+                    success=True
+                )
+                # Track feature usage
+                analytics.track_feature_usage(
+                    feature,
+                    duration_ms=int((time.time() - start_time) * 1000),
+                    success=True
+                )
+                return result
+            except Exception as e:
+                analytics.track_performance(
+                    operation_name,
+                    time.time() - start_time,
+                    success=False
+                )
+                analytics.track_feature_usage(
+                    feature,
+                    duration_ms=int((time.time() - start_time) * 1000),
+                    success=False,
+                    error=str(e)[:100]
                 )
                 raise
         return wrapper

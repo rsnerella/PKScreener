@@ -2159,7 +2159,8 @@ def addOrRunPipedMenus():
         slicewindowParam = f" --slicewindow {userPassedArgs.slicewindow}" if userPassedArgs.slicewindow else ""
         fnameParam = f" --fname {resultsContentsEncoded}" if resultsContentsEncoded else ""
         OutputControls().printOutput(f"{colorText.GREEN}Launching PKScreener with piped scanners. If it does not launch, please try with the following:{colorText.END}\n{colorText.FAIL}{launcher} -a Y -e -o {scannerOptionQuoted}{requestingUser}{enableLog}{backtestParam}{runIntradayAnalysisParam}{enableTelegramMode}{stockListParam}{slicewindowParam}{fnameParam}{colorText.END}")
-        sleep(2)
+        if "RUNNER" not in os.environ.keys():
+            sleep(2)
         
         # Capture the output of the piped scan to get the final counts
         import subprocess

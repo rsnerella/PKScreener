@@ -51,16 +51,26 @@ class StockScreener:
         self.isTradingTime = PKDateUtilities.isTradingTime()
         self.configManager = None
 
-    def setupLogger(self, log_level):
-        if log_level > 0:
-            os.environ["PKDevTools_Default_Log_Level"] = str(log_level)
-        log.setup_custom_logger(
-            "pkscreener",
-            log_level,
-            trace=False,
-            log_file_path="pkscreener-logs.txt",
-            filter=None,
-        )
+    def setupLogger(self, logLevel, hostRef, stock):
+        # Setup logger in child process
+        from PKDevTools.classes import log as pklog
+        import logging
+        # Ensure child process has proper logging
+        if logLevel == logging.NOTSET and os.environ.get("PKDevTools_Default_Log_Level") == "10":
+            logLevel = logging.DEBUG
+        
+        # Re-setup logger for this child process if needed
+        if logLevel > logging.NOTSET:
+            pklog.setup_custom_logger(
+                "pkscreener.child",
+                levelname=logLevel,
+                trace=False,
+                log_file_path=None,  # Let the main process handle file output
+                selective_debug=False
+            )
+        # Now log something to verify
+        if hostRef and hostRef.default_logger:
+            hostRef.default_logger.debug(f"Child process started for stock: {stock}")
 
     # @tracelog
     def screenStocks(
@@ -110,7 +120,7 @@ class StockScreener:
             any(prefix in stock_upper for prefix in INVALID_STOCK_PREFIXES)):
             return None
         
-        self.setupLogger(log_level=logLevel)
+        self.setupLogger(logLevel, hostRef, stock_upper)
         configManager = hostRef.configManager
         self.configManager = configManager
         screeningDictionary, saveDictionary = self.initResultDictionaries()
@@ -328,7 +338,7 @@ class StockScreener:
                 hasMASignalFilter = False
                 priceCrossed = False
 
-                isValidityCheckMet = self.performValidityCheckForExecuteOptions(executeOption,screener,fullData,screeningDictionary,saveDictionary,processedData,configManager,maLength,intraday_data)
+                isValidityCheckMet = self.performValidityCheckForExecuteOptions(stock, hostRef, executeOption, screener, fullData, screeningDictionary, saveDictionary, processedData, configManager, maLength, intraday_data)
                 if not isValidityCheckMet:
                     return returnLegibleData("Validity Check not met!")
                 isShortTermBullish = (executeOption == 11 and isValidityCheckMet)
@@ -835,7 +845,7 @@ class StockScreener:
                 )
         return None
 
-    def performValidityCheckForExecuteOptions(self,executeOption,screener,fullData,screeningDictionary,saveDictionary,processedData,configManager,subMenuOption=3,intraday_data=None):
+    def performValidityCheckForExecuteOptions(self,stock,hostRef,executeOption,screener,fullData,screeningDictionary,saveDictionary,processedData,configManager,subMenuOption=3,intraday_data=None):
         isValid = True
         if executeOption not in [11,12,13,14,15,16,17,18,19,20,23,24,25,27,28,30,31,32,33,34,35,36,37,38,39,42,43,44,45,46,47,48,49]:
             return True
@@ -877,9 +887,34 @@ class StockScreener:
             isValid = screener.findATRCross(processedData,saveDictionary, screeningDictionary)
         elif executeOption == 28:
             isValid = screener.findHigherBullishOpens(processedData)
-        elif executeOption == 30: # findBuySellSignalsFromATRTrailing # findATRTrailingStops
-            isValid = screener.findATRTrailingStops(fullData,sensitivity=configManager.atrTrailingStopSensitivity, atr_period=configManager.atrTrailingStopPeriod,ema_period=configManager.atrTrailingStopEMAPeriod,buySellAll=subMenuOption,saveDict=saveDictionary,screenDict=screeningDictionary)
-        elif executeOption == 31: # findBuySellSignalsFromATRTrailing # findATRTrailingStops
+        elif executeOption == 30:
+            isValid, debug_info = screener.findATRTrailingStopsDebug(
+                                fullData,
+                                sensitivity=configManager.atrTrailingStopSensitivity,
+                                atr_period=configManager.atrTrailingStopPeriod,
+                                ema_period=configManager.atrTrailingStopEMAPeriod,
+                                buySellAll=subMenuOption,
+                                saveDict=saveDictionary,
+                                screenDict=screeningDictionary,
+                                use_scoring=True,
+                                min_confidence=configManager.atrTrailingStopMinimumConfidencePercentage,
+                                consecutive_confirmation_bars=configManager.atrTrailingStopConsecutiveConfirmationBars,
+                                volume_confirmation=configManager.atrTrailingStopVolumeConfirmation,
+                                buy_threshold=configManager.atrTrailingStopBuyThreshold,
+                                sell_threshold=configManager.atrTrailingStopSellThreshold,
+                                min_bars_between_signals=configManager.atrTrailingStopMinBarsBetweenSignals,
+                                min_strength_for_confirmation=configManager.atrTrailingStopMinStrengthForConfirmation,
+                                stock_name=stock
+                            )
+            # Log debug info for first 10 stocks
+            if hasattr(hostRef, '_debug_counter'):
+                hostRef._debug_counter = getattr(hostRef, '_debug_counter', 0) + 1
+            else:
+                hostRef._debug_counter = 1
+            
+            if hostRef._debug_counter <= 200:  # Log first 20 stocks
+                hostRef.default_logger.info(f"DEBUG {stock}: {debug_info}")
+        elif executeOption == 31:
             isValid = screener.findHighMomentum(processedData,strict=(subMenuOption==1))
         elif executeOption == 32: # findIntradayOpenSetup
             isValid = screener.findIntradayOpenSetup(processedData,intraday_data,saveDictionary,screeningDictionary,buySellAll=subMenuOption)
@@ -1316,7 +1351,7 @@ class StockScreener:
             if start is None or start == lastTradingDate and data is not None:
                 # Ensure data is in oldest-first order for storage (consistent with existing format)
                 data_for_storage = data.sort_index(ascending=True) if data is not None and not data.empty else data
-                objectDictionary[stock] = data_for_storage.to_dict("split")
+                objectDictionary[stock] = data_for_storage.to_dict("split") if data_for_storage is not None else None
             if downloadOnly:
                 with hostRef.processingResultsCounter.get_lock():
                     hostRef.processingResultsCounter.value += 1

@@ -41,6 +41,7 @@ from PKDevTools.classes.multiprocessing_logging import LogQueueReader
 from PKDevTools.classes.SuppressOutput import SuppressOutput
 from PKDevTools.classes.FunctionTimeouts import exit_after
 
+from pkscreener.classes.PKAnalytics import track_performance
 from pkscreener.classes.StockScreener import StockScreener
 from pkscreener.classes.CandlePatterns import CandlePatterns
 from pkscreener.classes.ConfigManager import parser, tools
@@ -109,6 +110,7 @@ class PKScanRunner:
         return screenResults, saveResults
 
     @staticmethod
+    @track_performance("PKScanRunner.initQueues")
     def initQueues(minimumCount=0, userPassedArgs=None):
         """
         Initialize multiprocessing queues with optimized consumer count.
@@ -483,6 +485,7 @@ class PKScanRunner:
             worker.refreshDatabase = True
     
     @staticmethod
+    @track_performance("PKScanRunner.runScanWithParams")
     def runScanWithParams(userPassedArgs, keyboardInterruptEvent, screenCounter, screenResultsCounter,
                           stockDictPrimary, stockDictSecondary, testing, backtestPeriod, menuOption,
                           executeOption, samplingDuration, items, screenResults, saveResults,
@@ -523,9 +526,19 @@ class PKScanRunner:
                 menuOption, keyboardInterruptEvent, screenCounter, screenResultsCounter,
                 stockDictPrimary, stockDictSecondary, items, executeOption, userPassedArgs)
             try:
-                if logging_queue is not None:
-                    log_queue_reader = LogQueueReader(logging_queue)
-                    log_queue_reader.start()
+                if logging_queue is None:
+                    logging_queue = multiprocessing.Queue()
+                    default_logger().warning("logging_queue was None, created new one")
+                try:
+                    if logging_queue is not None:
+                        log_queue_reader = LogQueueReader(logging_queue)
+                        log_queue_reader.daemon = True
+                        log_queue_reader.start()
+                        default_logger().info("LogQueueReader started successfully")
+                    else:
+                        default_logger().warning("logging_queue is None, log reader not started")
+                except Exception as e:
+                    default_logger().error(f"Failed to start LogQueueReader: {e}", exc_info=True)
             except:  # pragma: no cover
                 pass
 
@@ -560,6 +573,7 @@ class PKScanRunner:
         return screenResults, saveResults, backtest_df, tasks_queue, results_queue, consumers, logging_queue
 
     @exit_after(180)  # Should not remain stuck starting the multiprocessing clients beyond this time
+    @track_performance("PKScanRunner.prepareToRunScan")
     @Halo(text='  [+] Creating multiple processes for faster processing...', spinner='dots')
     def prepareToRunScan(menuOption, keyboardInterruptEvent, screenCounter, screenResultsCounter,
                          stockDictPrimary, stockDictSecondary, items, executeOption, userPassedArgs):
@@ -628,6 +642,7 @@ class PKScanRunner:
         return tasks_queue, results_queue, consumers, logging_queue
 
     @staticmethod
+    @track_performance("PKScanRunner.startWorkersParallel")
     def startWorkersParallel(consumers):
         """
         Start all worker processes in parallel across all platforms.

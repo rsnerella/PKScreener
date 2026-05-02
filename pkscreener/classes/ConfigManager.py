@@ -99,6 +99,13 @@ class tools(SingletonMixin, metaclass=SingletonType):
         self.showPastStrategyData = False
         self.showPinnedMenuEvenForNoResult = True
         self.atrTrailingStopSensitivity = 1
+        self.atrTrailingStopConsecutiveConfirmationBars = 2 # Ideal is 1-3
+        self.atrTrailingStopMinBarsBetweenSignals = 5 # Cooldown period between same-type signals (prevents overtrading)
+        self.atrTrailingStopBuyThreshold = 2 # Minimum signal strength for buy (1-5, default: 2)
+        self.atrTrailingStopSellThreshold = 2 # Minimum signal strength for sell (1-5, default: 2)
+        self.atrTrailingStopMinStrengthForConfirmation = 2  # # Minimum signal strength for buy/sell (1-5, default: 2)
+        self.atrTrailingStopMinimumConfidencePercentage = 50 # Minimum confidence percentage for signal confirmation (0-100, default: 50). For buy it should be 50. For sell, it should be stricter : 70%
+        self.atrTrailingStopVolumeConfirmation = True
         self.atrTrailingStopPeriod = 10
         self.atrTrailingStopEMAPeriod = 200
         self.vcpRangePercentageFromTop = 20
@@ -232,6 +239,12 @@ class tools(SingletonMixin, metaclass=SingletonType):
             parser.set("config", "atrtrailingstopemaperiod", str(self.atrTrailingStopEMAPeriod))
             parser.set("config", "atrtrailingstopperiod", str(self.atrTrailingStopPeriod))
             parser.set("config", "atrtrailingstopsensitivity", str(self.atrTrailingStopSensitivity))
+            parser.set("config", "atrtrailingstopconsecutiveconfirmationbars", str(self.atrTrailingStopConsecutiveConfirmationBars))
+            parser.set("config", "atrtrailingstopbuythreshold", str(self.atrTrailingStopBuyThreshold))
+            parser.set("config", "atrtrailingstopsellthreshold", str(self.atrTrailingStopSellThreshold))
+            parser.set("config", "atrtrailingstopminstrengthforconfirmation", str(self.atrTrailingStopMinStrengthForConfirmation))
+            parser.set("config", "atrtrailingstopminimumconfidencepercentage", str(self.atrTrailingStopMinimumConfidencePercentage))
+            parser.set("config", "atrtrailingstopminbarsbetweensignals", str(self.atrTrailingStopMinBarsBetweenSignals))
             parser.set("config", "backtestPeriod", str(self.backtestPeriod))
             parser.set("config", "backtestPeriodFactor", str(self.backtestPeriodFactor))
             parser.set("config", "barometerx", str(self.barometerx))
@@ -250,6 +263,7 @@ class tools(SingletonMixin, metaclass=SingletonType):
             parser.set("config", "enableAdditionalVCPEMAFilters", "y" if (self.enableAdditionalVCPEMAFilters) else "n")
             parser.set("config", "enableAdditionalTrendFilters", "y" if (self.enableAdditionalTrendFilters) else "n")
             parser.set("config", "enableAdditionalVCPFilters", "y" if (self.enableAdditionalVCPFilters) else "n")
+            parser.set("config", "atrtrailingstopvolumeconfirmation", "y" if self.atrTrailingStopVolumeConfirmation else "n")
             parser.set("config", "enablePortfolioCalculations", "y" if self.enablePortfolioCalculations else "n")
             parser.set("config", "enableUsageAnalytics", "y" if self.enableUsageAnalytics else "n")
             parser.set("config", "generalTimeout", str(self.generalTimeout))
@@ -457,6 +471,24 @@ class tools(SingletonMixin, metaclass=SingletonType):
                 self.atrTrailingStopSensitivity = OutputControls().takeUserInput(
                     f"  [+] ATR Trailing Stop Sensitivity. (number)({colorText.GREEN}Optimal = 1{colorText.END}, Current: {colorText.FAIL}{self.atrTrailingStopSensitivity}{colorText.END}): "
                 ) or self.atrTrailingStopSensitivity
+                self.atrTrailingStopConsecutiveConfirmationBars = OutputControls().takeUserInput(
+                    f"  [+] ATR Trailing Stop Consecutive Confirmation Bars. (number)({colorText.GREEN}Optimal = 2{colorText.END}, Current: {colorText.FAIL}{self.atrTrailingStopConsecutiveConfirmationBars}{colorText.END}): "
+                ) or self.atrTrailingStopConsecutiveConfirmationBars
+                self.atrTrailingStopMinBarsBetweenSignals = OutputControls().takeUserInput( 
+                    f"  [+] ATR Trailing Stop Minimum bars between signals. (number)({colorText.GREEN}Optimal = 5{colorText.END}, Current: {colorText.FAIL}{self.atrTrailingStopMinBarsBetweenSignals}{colorText.END}): "
+                ) or self.atrTrailingStopMinBarsBetweenSignals
+                self.atrTrailingStopBuyThreshold = OutputControls().takeUserInput(
+                    f"  [+] ATR Trailing Stop Buy Threshold percentage. (number)({colorText.GREEN}Optimal = 2{colorText.END}, Current: {colorText.FAIL}{self.atrTrailingStopBuyThreshold}{colorText.END}): "
+                ) or self.atrTrailingStopBuyThreshold
+                self.atrTrailingStopSellThreshold = OutputControls().takeUserInput(
+                    f"  [+] ATR Trailing Stop Sell Threshold percentage. (number)({colorText.GREEN}Optimal = 2{colorText.END}, Current: {colorText.FAIL}{self.atrTrailingStopSellThreshold}{colorText.END}): "
+                ) or self.atrTrailingStopSellThreshold
+                self.atrTrailingStopMinStrengthForConfirmation = OutputControls().takeUserInput(
+                    f"  [+] ATR Trailing Stop Minimum strength for confirmation(number)({colorText.GREEN}Optimal = 2{colorText.END}, Current: {colorText.FAIL}{self.atrTrailingStopMinStrengthForConfirmation}{colorText.END}): "
+                ) or self.atrTrailingStopMinStrengthForConfirmation
+                self.atrTrailingStopMinimumConfidencePercentage = OutputControls().takeUserInput(
+                    f"  [+] ATR Trailing Stop Minimum confidence percentage for confirmation(number)({colorText.GREEN}Optimal = 50{colorText.END}, Current: {colorText.FAIL}{self.atrTrailingStopMinimumConfidencePercentage}{colorText.END}): "
+                ) or self.atrTrailingStopMinimumConfidencePercentage
                 self.atrTrailingStopEMAPeriod = OutputControls().takeUserInput(
                     f"  [+] ATR Trailing Stop EMA Period. (number)({colorText.GREEN}Optimal = 1 to 200{colorText.END}, Current: {colorText.FAIL}{self.atrTrailingStopEMAPeriod}{colorText.END}): "
                 ) or self.atrTrailingStopEMAPeriod
@@ -479,6 +511,11 @@ class tools(SingletonMixin, metaclass=SingletonType):
                     input(
                         f"  [+] Enable additional VCP filters like range and consolidation? [Y/N, Current: {colorText.FAIL}{'y' if self.enableAdditionalVCPFilters else 'n'}{colorText.END}]: "
                     ) or ('y' if self.enableAdditionalVCPFilters else 'n')
+                ).lower()
+                self.atrTrailingStopVolumeConfirmation = str(
+                    input(
+                        f"  [+] Enable volume confirmation for ATR Trailing Stop? [Y/N, Current: {colorText.FAIL}{'y' if self.atrTrailingStopVolumeConfirmation else 'n'}{colorText.END}]: "
+                    ) or ('y' if self.atrTrailingStopVolumeConfirmation else 'n')
                 ).lower()
                 self.enableAdditionalVCPEMAFilters = str(
                     input(
@@ -519,6 +556,12 @@ class tools(SingletonMixin, metaclass=SingletonType):
                 parser.set("config", "atrtrailingstopemaperiod", str(self.atrTrailingStopEMAPeriod))
                 parser.set("config", "atrtrailingstopperiod", str(self.atrTrailingStopPeriod))
                 parser.set("config", "atrtrailingstopsensitivity", str(self.atrTrailingStopSensitivity))
+                parser.set("config", "atrtrailingstopconsecutiveconfirmationbars", str(self.atrTrailingStopConsecutiveConfirmationBars))
+                parser.set("config", "atrtrailingstopbuythreshold", str(self.atrTrailingStopBuyThreshold))
+                parser.set("config", "atrtrailingstopsellthreshold", str(self.atrTrailingStopSellThreshold))
+                parser.set("config", "atrtrailingstopminbarsbetweensignals", str(self.atrTrailingStopMinBarsBetweenSignals))
+                parser.set("config", "atrtrailingstopminstrengthforconfirmation", str(self.atrTrailingStopMinStrengthForConfirmation))
+                parser.set("config", "atrtrailingstopminimumconfidencepercentage", str(self.atrTrailingStopMinimumConfidencePercentage))
                 parser.set("config", "backtestPeriod", str(self.backtestPeriod))
                 parser.set("config", "backtestPeriodFactor", str(self.backtestPeriodFactor))
                 parser.set("config", "barometerx", str(self.barometerx))
@@ -540,6 +583,7 @@ class tools(SingletonMixin, metaclass=SingletonType):
                 parser.set("config", "enableAdditionalVCPEMAFilters", str(self.enableAdditionalVCPEMAFilters))
                 parser.set("config", "enableAdditionalTrendFilters", str(self.enableAdditionalTrendFilters))
                 parser.set("config", "enableAdditionalVCPFilters", str(self.enableAdditionalVCPFilters))
+                parser.set("config", "atrtrailingstopvolumeconfirmation", str(self.atrTrailingStopVolumeConfirmation))
                 parser.set("config", "enablePortfolioCalculations", str(self.enablePortfolioCalculations))
                 parser.set("config", "enableUsageAnalytics", str(self.enableUsageAnalytics))
                 parser.set("config", "generalTimeout", str(self.generalTimeout))
@@ -712,6 +756,12 @@ class tools(SingletonMixin, metaclass=SingletonType):
                 self.otpInterval = int(parser.get("config", "otpInterval"))
                 self.atrTrailingStopPeriod = int(parser.get("config", "atrtrailingstopperiod"))
                 self.atrTrailingStopSensitivity = float(parser.get("config", "atrtrailingstopsensitivity"))
+                self.atrTrailingStopConsecutiveConfirmationBars = int(parser.get("config", "atrtrailingstopconsecutiveconfirmationbars"))
+                self.atrTrailingStopBuyThreshold = float(parser.get("config", "atrtrailingstopbuythreshold"))
+                self.atrTrailingStopSellThreshold = float(parser.get("config", "atrtrailingstopsellthreshold"))
+                self.atrTrailingStopMinBarsBetweenSignals = int(parser.get("config", "atrtrailingstopminbarsbetweensignals"))
+                self.atrTrailingStopMinStrengthForConfirmation = int(parser.get("config", "atrtrailingstopminstrengthforconfirmation"))
+                self.atrTrailingStopMinimumConfidencePercentage = int(parser.get("config", "atrtrailingstopminimumconfidencepercentage"))
                 self.generalTimeout = float(parser.get("config", "generalTimeout"))
                 self.defaultIndex = int(parser.get("config", "defaultIndex"))
                 self.enableAdditionalVCPEMAFilters = (
@@ -727,6 +777,11 @@ class tools(SingletonMixin, metaclass=SingletonType):
                 self.enableAdditionalVCPFilters = (
                     False
                     if "y" not in str(parser.get("config", "enableAdditionalVCPFilters")).lower()
+                    else True
+                )
+                self.atrTrailingStopVolumeConfirmation = (
+                    False
+                    if "y" not in str(parser.get("config", "atrtrailingstopvolumeconfirmation")).lower()
                     else True
                 )
                 self.enableUsageAnalytics = (

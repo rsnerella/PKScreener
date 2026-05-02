@@ -37,6 +37,7 @@ from PKDevTools.classes.log import default_logger
 from pkscreener.classes import Utility, ConsoleUtility
 from pkscreener.classes.MenuOptions import menus
 from PKDevTools.classes.Environment import PKEnvironment
+from pkscreener.classes.PKAnalytics import PKAnalyticsService, track_all
 
 class ValidationResult(Enum):
     Success = 0
@@ -92,7 +93,7 @@ class PKUserRegistration(SingletonMixin, metaclass=SingletonType):
         self._otp = newotp
 
     @classmethod
-    def validateToken(self):
+    def validateToken(self, retrialCount=0):
         try:
             if "RUNNER" in os.environ.keys() or ("USER_ID" in os.environ.keys() and os.environ["USER_ID"] == str(PKUserRegistration().userID)):
                 return True, ValidationResult.Success
@@ -105,11 +106,19 @@ class PKUserRegistration(SingletonMixin, metaclass=SingletonType):
             PKPikey.removeSavedFile(f"{PKUserRegistration().userID}")
             resp = Utility.tools.tryFetchFromServer(cache_file=f"{PKUserRegistration().userID}.pdf",directory="results/Data",hideOutput=False, branchName="SubData", no_cache=True)
             if resp is None or resp.status_code != 200:
+                PKAnalyticsService().track_error(error_type="validateTokenError", error_message="Invalid Response", context="PKUserRegistration.validateToken:ValidationResult.BadUserID")
+                if retrialCount <= 3:
+                    sleep(2)
+                    return PKUserRegistration.validateToken(retrialCount=retrialCount+1)
                 PKUserRegistration.resetSavedUserCreds()
                 return False, ValidationResult.BadUserID
             with open(os.path.join(Archiver.get_user_data_dir(),f"{PKUserRegistration().userID}.pdf"),"wb",) as f:
                 f.write(resp.content)
             if not PKPikey.openFile(f"{PKUserRegistration().userID}.pdf",PKUserRegistration().otp):
+                PKAnalyticsService().track_error(error_type="validateTokenError", error_message="Invalid OTP", context=f"PKUserRegistration.validateToken:ValidationResult.BadOTP:{PKUserRegistration().userID}")
+                if retrialCount <= 3:
+                    sleep(2)
+                    return PKUserRegistration.validateToken(retrialCount=retrialCount+1)
                 PKUserRegistration.resetSavedUserCreds()
                 return False, ValidationResult.BadOTP
             
@@ -119,17 +128,22 @@ class PKUserRegistration(SingletonMixin, metaclass=SingletonType):
         except Exception as e: # pragma: no cover
             if "RUNNER" in os.environ.keys():
                 return True, ValidationResult.Success
+            PKAnalyticsService().track_error(error_type="validateTokenError", error_message=str(e), context=f"PKUserRegistration.validateToken:ValidationResult.BadOTP:{PKUserRegistration().userID}")
+            if retrialCount < 2:
+                sleep(2)
+                return PKUserRegistration.validateToken(retrialCount=retrialCount+1)
             PKUserRegistration.resetSavedUserCreds()
             return False, ValidationResult.BadOTP
 
     @classmethod
+    @track_all("PKUserRegistration.login")
     def login(self, trialCount=0):
         try:
-            from pkscreener.classes.PKAnalytics import PKAnalyticsService
             PKAnalyticsService().collectMetrics(async_mode=True)
             if "RUNNER" in os.environ.keys():
                 return ValidationResult.Success
-        except: # pragma: no cover
+        except Exception as e: # pragma: no cover
+            PKAnalyticsService().track_error(error_type="UserLoginError", error_message=str(e), context="PKUserRegistration.login:ValidationResult.BadUserID")
             return ValidationResult.BadUserID
         ConsoleUtility.PKConsoleTools.clearScreen(userArgs=None, clearAlways=True, forceTop=True)
         configManager = tools()
@@ -189,6 +203,12 @@ class PKUserRegistration(SingletonMixin, metaclass=SingletonType):
                 PKUserRegistration().userID = usernameInt
                 PKUserRegistration().otp = otp
 
+                if trialCount == 1:
+                    # For some reason, at times, the first validation attempt 
+                    # after entering correct credentials fails due to some 
+                    # caching issue. So we can add a retry with some 
+                    # delay before it is marked as failed.
+                    sleep(10)
                 validationResult,validationReason = PKUserRegistration.validateToken()
                 if not validationResult and validationReason == ValidationResult.BadUserID:
                     PKUserRegistration.resetSavedUserCreds()

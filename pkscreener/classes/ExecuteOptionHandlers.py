@@ -441,11 +441,53 @@ def handle_execute_option_30(userPassedArgs, configManager, screener) -> None:
             f"({colorText.GREEN}Optimal:200{colorText.END}, Current={configManager.atrTrailingStopEMAPeriod}):"
         ) or configManager.atrTrailingStopEMAPeriod
         configManager.atrTrailingStopEMAPeriod = atrEma
+
+        atrMinStrength = OutputControls().takeUserInput(
+            f"{colorText.WARN}Enter the ATR Trailing Stop Minimum strength for confirmation "
+            f"({colorText.GREEN}Optimal:2{colorText.END}, Current={configManager.atrTrailingStopMinStrengthForConfirmation}):"
+        ) or configManager.atrTrailingStopMinStrengthForConfirmation
+        configManager.atrTrailingStopMinStrengthForConfirmation = atrMinStrength
+
+        atrMinConfidence = OutputControls().takeUserInput(
+            f"{colorText.WARN}Enter the ATR Trailing Stop Minimum confidence percentage for confirmation "
+            f"({colorText.GREEN}Optimal:50{colorText.END}, Current={configManager.atrTrailingStopMinimumConfidencePercentage}):"
+        ) or configManager.atrTrailingStopMinimumConfidencePercentage
+        configManager.atrTrailingStopMinimumConfidencePercentage = atrMinConfidence
+
+        atrConsecutiveConfirmations = OutputControls().takeUserInput(
+            f"{colorText.WARN}Enter the ATR Trailing Stop Consecutive confirmations bars required for stronger confirmation "
+            f"({colorText.GREEN}Optimal:2{colorText.END}, Current={configManager.atrTrailingStopConsecutiveConfirmationBars}):"
+        ) or configManager.atrTrailingStopConsecutiveConfirmationBars
+        configManager.atrTrailingStopConsecutiveConfirmationBars = atrConsecutiveConfirmations
         
+        atrMinBarsBetweenSignals = OutputControls().takeUserInput(
+            f"{colorText.WARN}Enter the ATR Trailing Stop Minimum bars between signals "
+            f"({colorText.GREEN}Optimal:5{colorText.END}, Current={configManager.atrTrailingStopMinBarsBetweenSignals}):"
+        ) or configManager.atrTrailingStopMinBarsBetweenSignals
+        configManager.atrTrailingStopMinBarsBetweenSignals = atrMinBarsBetweenSignals
+
+        atrTrailingStopBuyThreshold = OutputControls().takeUserInput(
+            f"{colorText.WARN}Enter the ATR Trailing Stop Buy threshold "
+            f"({colorText.GREEN}Optimal:2{colorText.END}, Current={configManager.atrTrailingStopBuyThreshold}):"
+        ) or configManager.atrTrailingStopBuyThreshold
+        configManager.atrTrailingStopBuyThreshold = atrTrailingStopBuyThreshold
+
+        atrTrailingStopSellThreshold = OutputControls().takeUserInput(
+            f"{colorText.WARN}Enter the ATR Trailing Stop Sell threshold "
+            f"({colorText.GREEN}Optimal:2{colorText.END}, Current={configManager.atrTrailingStopSellThreshold}):"
+        ) or configManager.atrTrailingStopSellThreshold
+        configManager.atrTrailingStopSellThreshold = atrTrailingStopSellThreshold
+
+        atrTrailingStopMinStrengthForConfirmation = OutputControls().takeUserInput(
+            f"{colorText.WARN}Enter the ATR Trailing Stop Minimum strength for confirmation "
+            f"({colorText.GREEN}Optimal:2{colorText.END}, Current={configManager.atrTrailingStopMinStrengthForConfirmation}):"
+        ) or configManager.atrTrailingStopMinStrengthForConfirmation
+        configManager.atrTrailingStopMinStrengthForConfirmation = atrTrailingStopMinStrengthForConfirmation
+
         configManager.setConfig(ConfigManager.parser, default=True, showFileCreatedText=False)
     
     screener.shouldLog = userPassedArgs.log
-    screener.computeBuySellSignals(None)
+    # screener.computeBuySellSignals(None)
 
 
 def handle_execute_option_31(userPassedArgs) -> int:

@@ -45,6 +45,7 @@ from PKDevTools.classes.SuppressOutput import SuppressOutput
 from PKDevTools.classes.PKBackupRestore import start_backup
 
 import pkscreener.classes.Fetcher as Fetcher
+from pkscreener.classes.PKAnalytics import track_performance
 from pkscreener.classes.PKTask import PKTask
 from pkscreener.classes import Utility, ImageUtility
 import pkscreener.classes.ConfigManager as ConfigManager
@@ -1260,6 +1261,7 @@ class PKAssetsManager:
         default_logger().debug(f"Attempted fresh download of {len(stockCodes)} stocks and downloaded {len(processedStocks)} stocks. {len(leftOutStocks)} stocks remaining/ignored.")
         return stockDict, 0
 
+    @track_performance("PKAssetsManager.loadStockData")
     @Halo(text='  [+] Downloading fresh instruments and their data from Data Providers...', spinner='dots')
     def loadStockData(
         stockDict,
@@ -1503,6 +1505,7 @@ class PKAssetsManager:
         # start_backup()
         return stockDict
 
+    @track_performance("PKAssetsManager.loadDataFromLocalPickle")
     @Halo(text='  [+] Loading data from local cache...', spinner='dots')
     def loadDataFromLocalPickle(stockDict, configManager, downloadOnly, defaultAnswer, exchangeSuffix, cache_file, isTrading, stockCodes=None):
         """
@@ -1669,6 +1672,7 @@ class PKAssetsManager:
         return fileDownloaded
 
     @staticmethod
+    @track_performance("PKAssetsManager.downloadSavedDataFromServer")
     def downloadSavedDataFromServer(stockDict, configManager, downloadOnly, defaultAnswer, retrial, forceLoad, stockCodes, exchangeSuffix, isIntraday, forceRedownload, cache_file, isTrading):
         """
         Download saved data from PK Screener server as fallback.

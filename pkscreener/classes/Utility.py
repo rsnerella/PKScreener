@@ -186,12 +186,11 @@ class tools:
     @Halo(text='', spinner='dots')
     def tryFetchFromServer(cache_file,repoOwner="pkjmesra",repoName="PKScreener",directory="results/Data",hideOutput=False,branchName="refs/heads/actions-data-download", no_cache=False):
         if not hideOutput:
-            OutputControls().printOutput(
-                        colorText.FAIL
-                        + "[+] Loading metadata from server. Metadata is not cached, or forced to redownload ..."
-                        + colorText.END
-                    )
-            OutputControls().printOutput(
+            if cache_file.endswith(".pdf"):
+                info_message = "[+] Logging in and validating user credentials..."
+                OutputControls().printOutput(colorText.GREEN + info_message + colorText.END)
+            else:
+                OutputControls().printOutput(
                     colorText.GREEN
                     + f"  [+] Downloading {colorText.END}{colorText.FAIL}{'Intraday' if configManager.isIntradayConfig() else 'Daily'}{colorText.END}{colorText.GREEN} cache from server ({'Primary' if repoOwner=='pkjmesra' else 'Secondary'}) for faster processing, Please Wait.."
                     + colorText.END
