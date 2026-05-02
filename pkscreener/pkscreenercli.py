@@ -181,7 +181,7 @@ from PKDevTools.classes.DebugConfig import DebugConfigManager
 
 from pkscreener import Imports
 from pkscreener.classes.MarketMonitor import MarketMonitor
-from pkscreener.classes.PKAnalytics import PKAnalyticsService
+from pkscreener.classes.PKAnalytics import AnalyticsCategory, AnalyticsLabel, PKAnalyticsService
 import pkscreener.classes.ConfigManager as ConfigManager
 from PKDevTools.classes import Archiver
 
@@ -1062,7 +1062,15 @@ def _exit_gracefully(config_manager, arg_parser):
         config_manager: Configuration manager instance
         arg_parser: Argument parser instance for accessing arguments
     """
+    
     try:
+        """Perform graceful exit cleanup with analytics flush."""
+        # Flush any pending analytics events
+        try:
+            from pkscreener.classes.PKAnalytics import PKAnalyticsService
+            PKAnalyticsService().flush(timeout=2)
+        except Exception:
+            pass
         from pkscreener.globals import resetConfigToDefault
         
         file_path = None
@@ -1244,10 +1252,17 @@ def _schedule_next_run():
         sleep(int(args.croninterval) if not args.testbuild else 3)
     
     runApplication()
-    _cron_runs += 1
+    _cron_runs += 1 
 
-
-@ping(interval=60, instance=PKAnalyticsService())
+def ping_analytics():
+    analytics = PKAnalyticsService()
+    analytics.send_event(
+        category=AnalyticsCategory.SYSTEM,
+        action="ping",
+        label=AnalyticsLabel.INFO
+    )
+    
+@ping(interval=60, instance=ping_analytics)
 def pkscreenercli():
     """Main CLI entry point.
     

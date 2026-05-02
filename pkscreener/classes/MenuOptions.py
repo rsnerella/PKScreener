@@ -628,7 +628,38 @@ class menu:
 
 # This Class manages application menus
 class menus:
+    # Class-level cache for rendered menus
+    _menu_cache = {}
+    _menu_cache_time = {}
+    CACHE_TTL = 360000  # 100 hours cache TTL
+
+    @classmethod
+    def _is_cache_valid(cls, key):
+        """Check if cached menu is still valid."""
+        import time
+        if key not in cls._menu_cache_time:
+            return False
+        return (time.time() - cls._menu_cache_time[key]) < cls.CACHE_TTL
     
+    @classmethod
+    def _get_cached_menu(cls, key, loader_func):
+        """Get cached menu or load it."""
+        import time
+        
+        # if key in cls._menu_cache and cls._is_cache_valid(key):
+        #     return cls._menu_cache[key]
+        
+        result = loader_func()
+        cls._menu_cache[key] = result
+        cls._menu_cache_time[key] = time.time()
+        return result
+    
+    @classmethod
+    def clear_cache(cls):
+        """Clear all cached menus."""
+        cls._menu_cache.clear()
+        cls._menu_cache_time.clear()
+
     @staticmethod
     def allMenus(topLevel="X",index=12):
         if index > MAX_MENU_OPTION:
@@ -850,8 +881,10 @@ class menus:
     
     def renderForMenu(self, selectedMenu:menu=None, skip=[], asList=False, renderStyle=None):
         if selectedMenu is None and self.level == 0:
+            cache_key = f"level0_{hash(str(skip))}_{asList}"
             # Top level Application Main menu
-            return self.renderMenuFromDictionary(dict=level0MenuDict,
+            def load_level0():
+                return self.renderMenuFromDictionary(dict=level0MenuDict,
                                                  exceptionKeys=["X", "U", "Z", "L", "D", "P"], # "T", "E"
                                                  coloredValues=(["P","X"] if not asList else []),
                                                  defaultMenu="P",
@@ -861,6 +894,8 @@ class menus:
                                                  parent=selectedMenu,
                                                  checkUpdate=True,
                                                  subOnly=["S", "B", "G", "P", "D", "F"]) # "M", "C"
+            return self._get_cached_menu(cache_key, load_level0)
+        
         elif selectedMenu is not None:
             if selectedMenu.menuKey == "S" and selectedMenu.level == 0:
                 strategies = self.strategyNames
@@ -916,8 +951,10 @@ class menus:
                                                          checkUpdate=False,
                                                          subOnly=["D","I"])
                 else:
+                    cache_key = f"level1_{selectedMenu.menuKey}_{hash(str(skip))}_{asList}"
                     # sub-menu of the top level main selected menu
-                    return self.renderMenuFromDictionary(dict=level1_X_MenuDict,
+                    def load_level1():
+                        return self.renderMenuFromDictionary(dict=level1_X_MenuDict,
                                                          exceptionKeys= ["N"], #["E", "M", "S", "15"],
                                                          coloredValues= [], #(["15",str(configManager.defaultIndex)] if not asList else []),
                                                          defaultMenu=str(configManager.defaultIndex),
@@ -929,6 +966,8 @@ class menus:
                                                          parent=selectedMenu,
                                                          checkUpdate=False,
                                                          subOnly=["W","E","S","2","3","4","5","6","7","8","9","10","11","12","13","14","15"])
+                    return self._get_cached_menu(cache_key, load_level1)
+                
             elif selectedMenu.level == 1:
                 self.level = 2
                 if selectedMenu.parent.menuKey in ["D"]:
@@ -993,8 +1032,10 @@ class menus:
                                                          parent=selectedMenu,
                                                          checkUpdate=False)
                 else:
+                    cache_key = f"level2_{selectedMenu.menuKey}_{hash(str(skip))}_{asList}"
                     # next levelsub-menu of the selected sub-menu
-                    return self.renderMenuFromDictionary(dict=level2_X_MenuDict,
+                    def load_level2():
+                        return self.renderMenuFromDictionary(dict=level2_X_MenuDict,
                                                          exceptionKeys=["0", str(MAX_MENU_OPTION), "M"],
                                                          coloredValues=(["9"] if not asList else []),
                                                          defaultMenu="9",
@@ -1007,6 +1048,8 @@ class menus:
                                                          parent=selectedMenu,
                                                          checkUpdate=False,
                                                          subOnly=[] if selectedMenu.menuKey in ["1"] else [x for x in level2_X_MenuDict.keys() if x not in ["M", "Z",str(MAX_MENU_OPTION)]])
+                    return self._get_cached_menu(cache_key, load_level2)
+                
             elif selectedMenu.level == 2:
                 self.level = 3
                 # next levelsub-menu of the selected sub-menu

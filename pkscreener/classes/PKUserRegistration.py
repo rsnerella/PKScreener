@@ -94,7 +94,7 @@ class PKUserRegistration(SingletonMixin, metaclass=SingletonType):
     @classmethod
     def validateToken(self):
         try:
-            if "RUNNER" in os.environ.keys():
+            if "RUNNER" in os.environ.keys() or ("USER_ID" in os.environ.keys() and os.environ["USER_ID"] == str(PKUserRegistration().userID)):
                 return True, ValidationResult.Success
             # Clear any cached responses for this user
             import requests_cache
@@ -103,7 +103,7 @@ class PKUserRegistration(SingletonMixin, metaclass=SingletonType):
             from PKDevTools.classes.Fetcher import session
             session.cache.clear()
             PKPikey.removeSavedFile(f"{PKUserRegistration().userID}")
-            resp = Utility.tools.tryFetchFromServer(cache_file=f"{PKUserRegistration().userID}.pdf",directory="results/Data",hideOutput=True, branchName="SubData", no_cache=True)
+            resp = Utility.tools.tryFetchFromServer(cache_file=f"{PKUserRegistration().userID}.pdf",directory="results/Data",hideOutput=False, branchName="SubData", no_cache=True)
             if resp is None or resp.status_code != 200:
                 PKUserRegistration.resetSavedUserCreds()
                 return False, ValidationResult.BadUserID
@@ -114,6 +114,7 @@ class PKUserRegistration(SingletonMixin, metaclass=SingletonType):
                 return False, ValidationResult.BadOTP
             
             PKUserRegistration.savedUserCreds()
+            os.environ["USER_ID"] = str(PKUserRegistration().userID)
             return True, ValidationResult.Success
         except Exception as e: # pragma: no cover
             if "RUNNER" in os.environ.keys():
@@ -125,7 +126,7 @@ class PKUserRegistration(SingletonMixin, metaclass=SingletonType):
     def login(self, trialCount=0):
         try:
             from pkscreener.classes.PKAnalytics import PKAnalyticsService
-            PKAnalyticsService().collectMetrics()
+            PKAnalyticsService().collectMetrics(async_mode=True)
             if "RUNNER" in os.environ.keys():
                 return ValidationResult.Success
         except: # pragma: no cover

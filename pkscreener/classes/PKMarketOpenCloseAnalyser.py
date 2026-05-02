@@ -451,7 +451,7 @@ class PKMarketOpenCloseAnalyser:
                 #         index = pd.to_datetime(f'{PKDateUtilities.tradingDate().strftime(f"%Y-%m-%d")} {MarketHours().openHour:02}:{MarketHours().openMinute+PKMarketOpenCloseAnalyser.configManager.morninganalysiscandlenumber+nextSellMinute}:00+05:30', utc=True)
                 #         df = df[df.index <=  index]
                 #         pass
-                #     foundNextSellCandle = scrStats.findATRTrailingStops(df=df,sensitivity=configManager.atrTrailingStopSensitivity, atr_period=configManager.atrTrailingStopPeriod,ema_period=configManager.atrTrailingStopEMAPeriod,buySellAll=2,saveDict=saveDictionary,screenDict=screeningDictionary)
+                #     foundNextSellCandle = scrStats.findATRTrailingStops(df=df,sensitivity=configManager.atrTrailingStopSensitivity, atr_period=configManager.atrTrailingStopPeriod,ema_period=configManager.atrTrailingStopEMAPeriod,buySellAll=2,saveDict=saveDictionary,screenDict=screeningDictionary,use_scoring=True,min_confidence=70)
                 #     nextSellMinute += 1
                 # if foundNextSellCandle:
                 #     ts = df.tail(len(df)-index +1).head(1).index[-1]

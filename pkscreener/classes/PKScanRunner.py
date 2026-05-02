@@ -131,10 +131,10 @@ class PKScanRunner:
         # OPTIMIZATION: For specific stock scans with known stockCodes, use fewer consumers
         # Process creation overhead is significant; fewer consumers = faster startup
         if userPassedArgs and getattr(userPassedArgs, 'stocklist', None):
-            # For specific stock lists, use 2 consumers maximum (balanced for performance)
-            totalConsumers = min(2, multiprocessing.cpu_count())
+            # For specific stock lists, use 3 consumers maximum (balanced for performance)
+            totalConsumers = min(3, multiprocessing.cpu_count())
             default_logger().debug(f"Using {totalConsumers} consumers for specific stock list")
-        elif userPassedArgs and userPassedArgs.options and ":0:" in userPassedArgs.options:
+        elif userPassedArgs and userPassedArgs.options and userPassedArgs.options.split(":")[1] == "0":
             # For individual stock analysis, use single consumer (no parallel overhead needed)
             totalConsumers = 1
             default_logger().debug(f"Using single consumer for individual stock analysis")
@@ -147,7 +147,7 @@ class PKScanRunner:
         # Process creation overhead increases significantly with more consumers
         # On Mac, creating more than 4 processes takes ~2s each
         # On Windows/Linux, similar overhead exists but slightly less
-        max_consumers = max(2, cpu_count // 2) if sys.platform.startswith('win') else (max(2, int(cpu_count * 0.66)) if sys.platform.startswith('darwin') else cpu_count)
+        max_consumers = max(3, cpu_count // 2) if sys.platform.startswith('win') else (max(4, int(cpu_count * 0.5)) if sys.platform.startswith('darwin') else cpu_count)
         if totalConsumers > max_consumers:
             default_logger().debug(f"Capping consumers from {totalConsumers} to {max_consumers} for faster startup")
             totalConsumers = max_consumers
@@ -644,12 +644,6 @@ class PKScanRunner:
         import time
         from concurrent.futures import ThreadPoolExecutor, as_completed
         
-        OutputControls().printOutput(
-            colorText.FAIL
-            + f"\n  [+] Using Period:{colorText.END}{colorText.GREEN}{PKScanRunner.configManager.period}{colorText.END}{colorText.FAIL} and Duration:{colorText.END}{colorText.GREEN}{PKScanRunner.configManager.duration}{colorText.END}{colorText.FAIL} for scan! You can change this in user config."
-            + colorText.END
-        )
-        
         start_time = time.time()
         total_workers = len(consumers)
         
@@ -666,6 +660,12 @@ class PKScanRunner:
         else:
             max_workers = min(total_workers, os.cpu_count() or 8)
         
+        OutputControls().printOutput(
+            colorText.FAIL
+            + f"\n  [+] Using Period:{colorText.END}{colorText.GREEN}{PKScanRunner.configManager.period}{colorText.END}{colorText.FAIL} and Duration:{colorText.END}{colorText.GREEN}{PKScanRunner.configManager.duration}{colorText.END}{colorText.FAIL} with {total_workers} consumers and {max_workers} workers for scan! You can change this in user config."
+            + colorText.END
+        )
+
         # Start all workers in parallel using threads
         # This is safe because Process.start() is non-blocking and returns quickly
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
