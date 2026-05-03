@@ -113,6 +113,11 @@ jobs:
             TARGET: Windows
             CMD_BUILD: |
               pyinstaller --onefile `
+                --hidden-import imageio `
+                --hidden-import imageio.v2 `
+                --hidden-import imageio.plugins `
+                --collect-all imageio `
+                --copy-metadata imageio `
                 --hidden-import numba `
                 --hidden-import llvmlite `
                 --hidden-import coverage `
@@ -180,6 +185,11 @@ jobs:
             TARGET: Linux
             CMD_BUILD: |
               pyinstaller --onefile \
+                --hidden-import imageio \
+                --hidden-import imageio.v2 \
+                --hidden-import imageio.plugins \
+                --collect-all imageio \
+                --copy-metadata imageio \
                 --hidden-import numba \
                 --hidden-import llvmlite \
                 --hidden-import coverage \
@@ -247,6 +257,11 @@ jobs:
             TARGET: Linux
             CMD_BUILD: |
               pyinstaller --onefile \
+                --hidden-import imageio \
+                --hidden-import imageio.v2 \
+                --hidden-import imageio.plugins \
+                --collect-all imageio \
+                --copy-metadata imageio \
                 --hidden-import numba \
                 --hidden-import llvmlite \
                 --hidden-import coverage \
@@ -314,6 +329,11 @@ jobs:
             TARGET: MacOS
             CMD_BUILD: |
               pyinstaller --onefile --windowed \
+                --hidden-import imageio \
+                --hidden-import imageio.v2 \
+                --hidden-import imageio.plugins \
+                --collect-all imageio \
+                --copy-metadata imageio \
                 --hidden-import numba \
                 --hidden-import llvmlite \
                 --hidden-import coverage \
@@ -377,6 +397,11 @@ jobs:
             TARGET: MacOS
             CMD_BUILD: |
               pyinstaller --onefile --windowed \
+                --hidden-import imageio \
+                --hidden-import imageio.v2 \
+                --hidden-import imageio.plugins \
+                --collect-all imageio \
+                --copy-metadata imageio \
                 --hidden-import numba \
                 --hidden-import llvmlite \
                 --hidden-import coverage \
