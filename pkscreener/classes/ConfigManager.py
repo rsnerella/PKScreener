@@ -74,7 +74,7 @@ class tools(SingletonMixin, metaclass=SingletonType):
         self.shuffleEnabled = True
         self.alwaysExportToExcel = False
         self.cacheEnabled = True
-        self.stageTwo = True
+        self.stageTwo = False
         self.useEMA = False
         self.showunknowntrends = True
         self.enablePortfolioCalculations = False
@@ -102,7 +102,7 @@ class tools(SingletonMixin, metaclass=SingletonType):
         self.atrTrailingStopConsecutiveConfirmationBars = 2 # Ideal is 1-3
         self.atrTrailingStopMinBarsBetweenSignals = 5 # Cooldown period between same-type signals (prevents overtrading)
         self.atrTrailingStopBuyThreshold = 2 # Minimum signal strength for buy (1-5, default: 2)
-        self.atrTrailingStopSellThreshold = 2 # Minimum signal strength for sell (1-5, default: 2)
+        self.atrTrailingStopSellThreshold = 1 # Minimum signal strength for sell (1-5, default: 2)
         self.atrTrailingStopMinStrengthForConfirmation = 2  # # Minimum signal strength for buy/sell (1-5, default: 2)
         self.atrTrailingStopMinimumConfidencePercentage = 50 # Minimum confidence percentage for signal confirmation (0-100, default: 50). For buy it should be 50. For sell, it should be stricter : 70%
         self.atrTrailingStopVolumeConfirmation = True
@@ -475,13 +475,13 @@ class tools(SingletonMixin, metaclass=SingletonType):
                     f"  [+] ATR Trailing Stop Consecutive Confirmation Bars. (number)({colorText.GREEN}Optimal = 2{colorText.END}, Current: {colorText.FAIL}{self.atrTrailingStopConsecutiveConfirmationBars}{colorText.END}): "
                 ) or self.atrTrailingStopConsecutiveConfirmationBars
                 self.atrTrailingStopMinBarsBetweenSignals = OutputControls().takeUserInput( 
-                    f"  [+] ATR Trailing Stop Minimum bars between signals. (number)({colorText.GREEN}Optimal = 5{colorText.END}, Current: {colorText.FAIL}{self.atrTrailingStopMinBarsBetweenSignals}{colorText.END}): "
+                    f"  [+] ATR Trailing Stop Minimum bars between signals. (number)({colorText.GREEN}Optimal = 5 for Buy, 0 for Sell{colorText.END}, Current: {colorText.FAIL}{self.atrTrailingStopMinBarsBetweenSignals}{colorText.END}): "
                 ) or self.atrTrailingStopMinBarsBetweenSignals
                 self.atrTrailingStopBuyThreshold = OutputControls().takeUserInput(
-                    f"  [+] ATR Trailing Stop Buy Threshold percentage. (number)({colorText.GREEN}Optimal = 2{colorText.END}, Current: {colorText.FAIL}{self.atrTrailingStopBuyThreshold}{colorText.END}): "
+                    f"  [+] ATR Trailing Stop Buy Threshold. (number)({colorText.GREEN}Optimal = 2{colorText.END}, Current: {colorText.FAIL}{self.atrTrailingStopBuyThreshold}{colorText.END}): "
                 ) or self.atrTrailingStopBuyThreshold
                 self.atrTrailingStopSellThreshold = OutputControls().takeUserInput(
-                    f"  [+] ATR Trailing Stop Sell Threshold percentage. (number)({colorText.GREEN}Optimal = 2{colorText.END}, Current: {colorText.FAIL}{self.atrTrailingStopSellThreshold}{colorText.END}): "
+                    f"  [+] ATR Trailing Stop Sell Threshold. (number)({colorText.GREEN}Optimal = 1{colorText.END}, Current: {colorText.FAIL}{self.atrTrailingStopSellThreshold}{colorText.END}): "
                 ) or self.atrTrailingStopSellThreshold
                 self.atrTrailingStopMinStrengthForConfirmation = OutputControls().takeUserInput(
                     f"  [+] ATR Trailing Stop Minimum strength for confirmation(number)({colorText.GREEN}Optimal = 2{colorText.END}, Current: {colorText.FAIL}{self.atrTrailingStopMinStrengthForConfirmation}{colorText.END}): "

@@ -462,7 +462,7 @@ def handle_execute_option_30(userPassedArgs, configManager, screener) -> None:
         
         atrMinBarsBetweenSignals = OutputControls().takeUserInput(
             f"{colorText.WARN}Enter the ATR Trailing Stop Minimum bars between signals "
-            f"({colorText.GREEN}Optimal:5{colorText.END}, Current={configManager.atrTrailingStopMinBarsBetweenSignals}):"
+            f"({colorText.GREEN}Optimal:5 for Buy, 0 for Sell{colorText.END}, Current={configManager.atrTrailingStopMinBarsBetweenSignals}):"
         ) or configManager.atrTrailingStopMinBarsBetweenSignals
         configManager.atrTrailingStopMinBarsBetweenSignals = atrMinBarsBetweenSignals
 
@@ -474,7 +474,7 @@ def handle_execute_option_30(userPassedArgs, configManager, screener) -> None:
 
         atrTrailingStopSellThreshold = OutputControls().takeUserInput(
             f"{colorText.WARN}Enter the ATR Trailing Stop Sell threshold "
-            f"({colorText.GREEN}Optimal:2{colorText.END}, Current={configManager.atrTrailingStopSellThreshold}):"
+            f"({colorText.GREEN}Optimal:1{colorText.END}, Current={configManager.atrTrailingStopSellThreshold}):"
         ) or configManager.atrTrailingStopSellThreshold
         configManager.atrTrailingStopSellThreshold = atrTrailingStopSellThreshold
 

@@ -512,6 +512,9 @@ def label_data_for_printing_impl(
         elif execute_option == 27:  # ATR Cross
             sort_key = ["ATR"] if "ATR" in screen_results.columns else ["volume"]
             ascending = [False]
+        elif execute_option == 30:  # ATR Trailing Stop
+             sort_key = ["Confidence"] if "Confidence" in screen_results.columns else ["volume"]
+             ascending = [False]
         elif execute_option == 31:  # DEEL Momentum
             sort_key = ["%Chng"]
             ascending = [False]
@@ -536,7 +539,7 @@ def label_data_for_printing_impl(
             default_logger().debug(e, exc_info=True)
         
         # Columns to delete
-        columns_to_be_deleted = ["MFI", "FVDiff", "ConfDMADifference", "bbands_ulr_ratio_max5", "RSIi"]
+        columns_to_be_deleted = ["MFI", "FVDiff", "ConfDMADifference", "bbands_ulr_ratio_max5", "RSIi","Confidence"]
         if menu_option not in ["F"]:
             columns_to_be_deleted.extend(["ScanOption"])
         if "EoDDiff" in save_results.columns:

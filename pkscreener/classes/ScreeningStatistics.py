@@ -178,6 +178,130 @@ class ScreeningStatistics:
         high_confidence = entries[entries["Confidence"] == "HIGH"]
     """
 
+    def addBearishSellSignals(self, df_src, min_confidence=50):
+        """
+        Add additional bearish sell signals when ATR-based signals are weak.
+        
+        This method provides sell signals based on:
+        - Death crosses (50/200 SMA)
+        - Breakdown below key moving averages
+        - EMA crossovers
+        - RSI bearish divergences
+        
+        Args:
+            df_src: DataFrame with OHLCV data and indicators (SMA, LMA, RSI)
+            min_confidence: Minimum confidence threshold to accept signal
+        
+        Returns:
+            DataFrame with added Sell signals
+        """
+        if df_src is None or len(df_src) < 20:
+            return df_src
+        
+        df = df_src.copy()
+        original_sell_count = df["Sell"].sum() if "Sell" in df.columns else 0
+        
+        # Initialize signal columns if not present
+        if "Sell" not in df.columns:
+            df["Sell"] = False
+        if "Signal_Strength" not in df.columns:
+            df["Signal_Strength"] = 0
+        if "Sell_Confidence" not in df.columns:
+            df["Sell_Confidence"] = 0
+        
+        # Only add signals if we don't already have many sells
+        if original_sell_count > 0:
+            return df  # Already have signals, don't add noise
+        
+        # =============================================================
+        # 1. DEATH CROSS (50 SMA below 200 SMA)
+        # =============================================================
+        if "SMA" in df.columns and "LMA" in df.columns:
+            # Price below both MAs adds conviction
+            price_below_both = (df["close"] < df["SMA"]) & (df["close"] < df["LMA"])
+            death_cross = (df["SMA"] < df["LMA"]) & (df["SMA"].shift(1) > df["LMA"].shift(1))
+            
+            # Stronger signal when price confirms
+            strong_death_cross = death_cross & price_below_both
+            if strong_death_cross.any():
+                df.loc[strong_death_cross, "Sell"] = True
+                df.loc[strong_death_cross, "Signal_Strength"] = 4
+                df.loc[strong_death_cross, "Sell_Confidence"] = 85
+            elif death_cross.any():
+                df.loc[death_cross, "Sell"] = True
+                df.loc[death_cross, "Signal_Strength"] = 3
+                df.loc[death_cross, "Sell_Confidence"] = 70
+        
+        # =============================================================
+        # 2. BREAKDOWN BELOW 200 SMA
+        # =============================================================
+        if "LMA" in df.columns and not df["Sell"].any():
+            # Close breaks below 200 SMA (major support)
+            below_200_with_volume = (
+                (df["close"] < df["LMA"]) & 
+                (df["close"].shift(1) > df["LMA"].shift(1)) &
+                (df["volume"] > df["volume"].rolling(20).mean() * 1.2 if "volume" in df.columns else True)
+            )
+            if below_200_with_volume.any():
+                df.loc[below_200_with_volume, "Sell"] = True
+                df.loc[below_200_with_volume, "Signal_Strength"] = 3
+                df.loc[below_200_with_volume, "Sell_Confidence"] = 75
+        
+        # =============================================================
+        # 3. BEARISH ENGULFING PATTERN
+        # =============================================================
+        if len(df) > 1:
+            # Current candle engulfs previous candle's body
+            bearish_engulfing = (
+                (df["open"] > df["close"]) &  # Current is bearish
+                (df["open"].shift(1) < df["close"].shift(1)) &  # Previous was bullish
+                (df["open"] > df["close"].shift(1)) &  # Opens above prev close
+                (df["close"] < df["open"].shift(1))    # Closes below prev open
+            )
+            if bearish_engulfing.any() and not df["Sell"].any():
+                df.loc[bearish_engulfing, "Sell"] = True
+                df.loc[bearish_engulfing, "Signal_Strength"] = 3
+                df.loc[bearish_engulfing, "Sell_Confidence"] = 65
+        
+        # =============================================================
+        # 4. RSI SELLING PRESSURE
+        # =============================================================
+        if "RSI" in df.columns and not df["Sell"].any():
+            # RSI falling from overbought with bearish momentum
+            rsi_sell_signal = (
+                (df["RSI"] > 70) &  # Was overbought
+                (df["RSI"] < df["RSI"].shift(1)) &  # Now falling
+                (df["close"] < df["close"].shift(1))  # Price falling
+            )
+            if rsi_sell_signal.any():
+                df.loc[rsi_sell_signal, "Sell"] = True
+                df.loc[rsi_sell_signal, "Signal_Strength"] = 2
+                df.loc[rsi_sell_signal, "Sell_Confidence"] = 60
+        
+        # =============================================================
+        # 5. MACD BEARISH CROSSOVER
+        # =============================================================
+        if len(df) > 26 and not df["Sell"].any():
+            try:
+                macd_line = pktalib.MACD(df["close"], 12, 26, 9)[0]
+                macd_signal = pktalib.MACD(df["close"], 12, 26, 9)[1]
+                
+                if len(macd_line) > 1 and len(macd_signal) > 1:
+                    macd_bearish = (macd_line < macd_signal) & (macd_line.shift(1) > macd_signal.shift(1))
+                    if macd_bearish.any():
+                        df.loc[macd_bearish, "Sell"] = True
+                        df.loc[macd_bearish, "Signal_Strength"] = 3
+                        df.loc[macd_bearish, "Sell_Confidence"] = 70
+            except Exception:
+                pass
+        
+        # Log results
+        new_sells = df["Sell"].sum() - original_sell_count
+        if new_sells > 0 and self.default_logger:
+            self.default_logger.debug(f"Added {new_sells} bearish sell signals")
+        
+        return df
+
     def computeBuySellSignals(self, df_src, ema_period=200, retry=True, confirmation_bars=1, min_strength=2, 
                         volume_confirmation=True, stock_name="Unknown"):
         """
@@ -450,8 +574,8 @@ class ScreeningStatistics:
                 if Imports["vectorbt"]:
                     from vectorbt.indicators import MA as vbt
                     vectorbt_available = True
-                    if self.default_logger:
-                        self.default_logger.debug("Using VectorBT for signal computation")
+                    # if self.default_logger:
+                    #     self.default_logger.debug("Using VectorBT for signal computation")
             except (ImportError, OSError, FileNotFoundError) as e:
                 # Handle missing vectorbt or template files
                 if self.default_logger:
@@ -480,15 +604,15 @@ class ScreeningStatistics:
                         if Imports["vectorbt"]:
                             from vectorbt.indicators import MA as vbt
                             vectorbt_available = True
-                            if self.default_logger:
-                                self.default_logger.debug("VectorBT loaded after template download")
+                            # if self.default_logger:
+                            #     self.default_logger.debug("VectorBT loaded after template download")
                 except Exception as ex:
                     if self.default_logger:
                         self.default_logger.debug(f"Error recovering from missing dependencies: {ex}", exc_info=True)
             
             if vectorbt_available:
-                if self.default_logger:
-                    self.default_logger.debug(f"Processing {len(df)} rows with VectorBT")
+                # if self.default_logger:
+                #     self.default_logger.debug(f"Processing {len(df)} rows with VectorBT")
                 
                 # =================================================================
                 # VECTORBT IMPLEMENTATION
@@ -605,16 +729,63 @@ class ScreeningStatistics:
                         df["Buy"] = (buy_condition & 
                                     (df["Signal_Strength"] >= min_strength) & 
                                     (df["Buy_Consecutive"] if confirmation_bars > 1 else True))
-                        
+
                         # Sell signals: price below stop AND strength >= min_strength AND consecutive confirmation
                         df["Sell"] = (sell_condition & 
                                     (df["Signal_Strength"] >= min_strength) & 
                                     (df["Sell_Consecutive"] if confirmation_bars > 1 else True))
-                        
+
                         # Override with strong crossover signals (most reliable - always valid)
                         df.loc[df["Above"] == True, "Buy"] = True
                         df.loc[df["Below"] == True, "Sell"] = True
-                        
+
+                        # ============ ADDITIONAL SELL SIGNALS FOR BEARISH MARKET ============
+                        # These provide sell signals even when ATR conditions aren't met
+                        if not df["Sell"].any() and confirmation_bars <= 2:
+                            
+                            # 1. Death Cross (50 SMA crosses below 200 SMA) - Strong sell signal
+                            if "SMA" in df.columns and "LMA" in df.columns and len(df) > 2:
+                                death_cross = (df["SMA"] < df["LMA"]) & (df["SMA"].shift(1) > df["LMA"].shift(1))
+                                if death_cross.any():
+                                    df.loc[death_cross, "Sell"] = True
+                                    df.loc[death_cross, "Signal_Strength"] = 4  # Strong signal
+                                    df.loc[death_cross, "Sell_Confidence"] = 85
+                                    if self.default_logger:
+                                        self.default_logger.debug("Added death cross sell signals")
+                            
+                            # 2. Close below 200 SMA (major breakdown) - Moderate sell signal
+                            if "LMA" in df.columns and not df["Sell"].any():
+                                below_200 = (df["close"] < df["LMA"]) & (df["close"].shift(1) > df["LMA"].shift(1))
+                                if below_200.any():
+                                    df.loc[below_200, "Sell"] = True
+                                    df.loc[below_200, "Signal_Strength"] = 3
+                                    df.loc[below_200, "Sell_Confidence"] = 70
+                                    if self.default_logger:
+                                        self.default_logger.debug("Added below 200MA sell signals")
+                            
+                            # 3. 5-day EMA crossing below 20-day EMA (short-term bearish)
+                            if len(df) > 20:
+                                ema5 = df["close"].ewm(span=5, adjust=False).mean()
+                                ema20 = df["close"].ewm(span=20, adjust=False).mean()
+                                ema_cross_below = (ema5 < ema20) & (ema5.shift(1) > ema20.shift(1))
+                                if ema_cross_below.any() and not df["Sell"].any():
+                                    df.loc[ema_cross_below, "Sell"] = True
+                                    df.loc[ema_cross_below, "Signal_Strength"] = 2
+                                    df.loc[ema_cross_below, "Sell_Confidence"] = 55
+                                    if self.default_logger:
+                                        self.default_logger.debug("Added EMA5/20 cross sell signals")
+                            
+                            # 4. RSI downtrend with bearish divergence
+                            if "RSI" in df.columns and len(df) > 5:
+                                # RSI falling from overbought (>70) to below 50
+                                rsi_falling = (df["RSI"] < 50) & (df["RSI"].shift(1) >= 70)
+                                if rsi_falling.any() and not df["Sell"].any():
+                                    df.loc[rsi_falling, "Sell"] = True
+                                    df.loc[rsi_falling, "Signal_Strength"] = 3
+                                    df.loc[rsi_falling, "Sell_Confidence"] = 65
+                                    if self.default_logger:
+                                        self.default_logger.debug("Added RSI falling from overbought sell signals")
+
                         # ============ CONFIDENCE SCORES (0-100) ============
                         # Buy confidence calculation
                         buy_mask = df["Buy"] == True
@@ -659,10 +830,10 @@ class ScreeningStatistics:
                         df["Sell_Confidence"] = 50 if df["Sell"].any() else 0
                         df["Signal_Strength"] = 2  # Moderate default
                 
-                    if self.default_logger:
-                        buy_count = df["Buy"].sum() if "Buy" in df.columns else 0
-                        sell_count = df["Sell"].sum() if "Sell" in df.columns else 0
-                        self.default_logger.debug(f"VectorBT results: {buy_count} buys, {sell_count} sells")
+                    # if self.default_logger:
+                    #     buy_count = df["Buy"].sum() if "Buy" in df.columns else 0
+                    #     sell_count = df["Sell"].sum() if "Sell" in df.columns else 0
+                    #     self.default_logger.debug(f"VectorBT results: {buy_count} buys, {sell_count} sells")
             
             else:
                 # =====================================================================
@@ -794,10 +965,10 @@ class ScreeningStatistics:
                     if df["Sell"].any():
                         df.loc[df["Sell"] & (df["Below"] == True), "Signal_Strength"] = 3
                     
-                    if self.default_logger:
-                        buy_count = df["Buy"].sum() if "Buy" in df.columns else 0
-                        sell_count = df["Sell"].sum() if "Sell" in df.columns else 0
-                        self.default_logger.debug(f"Fallback results: {buy_count} buys, {sell_count} sells for {stock_name}")
+                    # if self.default_logger:
+                    #     buy_count = df["Buy"].sum() if "Buy" in df.columns else 0
+                    #     sell_count = df["Sell"].sum() if "Sell" in df.columns else 0
+                    #     self.default_logger.debug(f"Fallback results: {buy_count} buys, {sell_count} sells for {stock_name}")
             
         except KeyboardInterrupt:
             # Re-raise keyboard interrupt for proper handling
@@ -1093,6 +1264,7 @@ class ScreeningStatistics:
     def computeBalancedSignals(self, df, ema_period=200, 
                             buy_threshold=2, sell_threshold=2,
                             min_bars_between_signals=5,
+                            min_bars_between_sell_signals=0,
                             volume_confirmation=True,
                             confirmation_bars=1,
                             min_strength=2,
@@ -1117,6 +1289,7 @@ class ScreeningStatistics:
             buy_threshold (int): Minimum signal strength for buy (1-5, default: 2)
             sell_threshold (int): Minimum signal strength for sell (1-5, default: 2)
             min_bars_between_signals (int): Minimum bars between same-type signals (default: 5)
+            min_bars_between_sell_signals (int): Minimum bars between sell signals (default: 0)
             volume_confirmation (bool): Whether to require volume confirmation (default: True)
         
         Returns:
@@ -1216,7 +1389,7 @@ class ScreeningStatistics:
             
             # Apply cooldown filter
             df["Buy_Filtered"] = buy_qualified & (df["Bars_Since_Buy"] >= min_bars_between_signals)
-            df["Sell_Filtered"] = sell_qualified & (df["Bars_Since_Sell"] >= min_bars_between_signals)
+            df["Sell_Filtered"] = sell_qualified & (df["Bars_Since_Sell"] >= min_bars_between_sell_signals)
             
             # Final signals
             df["Buy_Signal"] = df["Buy_Filtered"]
@@ -1975,6 +2148,7 @@ class ScreeningStatistics:
                             buy_threshold=2,
                             sell_threshold=2,
                             min_bars_between_signals=1,
+                            min_bars_between_sell_signals=0,
                             min_strength_for_confirmation=2,
                             stock_name="Unknown"):
         """
@@ -2027,6 +2201,9 @@ class ScreeningStatistics:
         except Exception:
             return False, {}
         
+        buy_confidence = 0
+        sell_confidence = 0
+
         # Quick volume check
         if 'volume' in df.columns and len(df) > 20:
             try:
@@ -2117,7 +2294,9 @@ class ScreeningStatistics:
             
             if data_with_signals is None:
                 return False, {}
-            
+            # Add bearish sell signals if none found
+            if data_with_signals is not None and not data_with_signals["Sell"].any():
+                data_with_signals = self.addBearishSellSignals(data_with_signals)
         except Exception as e:
             if self.default_logger:
                 self.default_logger.debug(f"computeBuySellSignals error: {e}")
@@ -2134,7 +2313,7 @@ class ScreeningStatistics:
         signal_strength = recent["Signal_Strength"].iloc[0] if "Signal_Strength" in recent.columns else 0
         buy_confidence = recent["Buy_Confidence"].iloc[0] if "Buy_Confidence" in recent.columns else 0
         sell_confidence = recent["Sell_Confidence"].iloc[0] if "Sell_Confidence" in recent.columns else 0
-        
+        self.default_logger.debug(f"computeBuySellSignals for {stock_name}: Returned result=Buy:{buy_signal}, Sell:{sell_signal}, Strength:{signal_strength}, Buy_Conf:{buy_confidence}, Sell_Conf:{sell_confidence}")
         # =========================================================================
         # LEVEL 4: USE SCORING FOR CANDIDATE STOCKS (Optional)
         # =========================================================================
@@ -2149,7 +2328,7 @@ class ScreeningStatistics:
                     recent_scored = scored_data.tail(1)
                     if "Signal_Score" in recent_scored.columns:
                         signal_score = recent_scored["Signal_Score"].iloc[0]
-                        
+                        self.default_logger.debug(f"computeBuySellSignalsWithScores for {stock_name}: Signal_Score {signal_score}")
                         if buy_signal and signal_score < min_confidence:
                             buy_signal = False
                         elif buy_signal:
@@ -2159,6 +2338,7 @@ class ScreeningStatistics:
                             sell_signal = False
                         elif sell_signal:
                             sell_confidence = signal_score
+                self.default_logger.debug(f"computeBuySellSignalsWithScores for {stock_name}: Returned result=Buy:{buy_signal}, Sell:{sell_signal}")
             except Exception as e:
                 if self.default_logger:
                     self.default_logger.debug(f"Scoring error: {e}")
@@ -2176,6 +2356,7 @@ class ScreeningStatistics:
                     sell_threshold=sell_threshold if buySellAll == 2 else 1,
                     volume_confirmation=volume_confirmation,
                     min_bars_between_signals=min_bars_between_signals,
+                    min_bars_between_sell_signals=min_bars_between_sell_signals,
                     confirmation_bars=consecutive_confirmation_bars,
                     min_strength=min_strength_for_confirmation,
                     stock_name=stock_name
@@ -2190,6 +2371,7 @@ class ScreeningStatistics:
                         if "Sell_Signal" in recent_balanced.columns:
                             sell_signal = sell_signal and recent_balanced["Sell_Signal"].iloc[0]
                     # For buySellAll == 3, skip balanced filtering entirely
+                    self.default_logger.debug(f"computeBalancedSignals for {stock_name}: Returned result=Buy:{buy_signal}, Sell:{sell_signal}")
             except Exception as e:
                 if self.default_logger:
                     self.default_logger.debug(f"Balanced filter error: {e}")
@@ -2202,7 +2384,7 @@ class ScreeningStatistics:
         
         if sell_signal and sell_confidence < min_confidence:
             sell_signal = False
-        
+        self.default_logger.debug(f"Level 6 for {stock_name}: Returned result=Buy:{buy_signal}, Sell:{sell_signal}, Buy_Conf:{buy_confidence}, Sell_Conf:{sell_confidence}")
         # =========================================================================
         # LEVEL 7: DETERMINE RETURN VALUE
         # =========================================================================
@@ -2219,9 +2401,18 @@ class ScreeningStatistics:
             result = buy_signal or sell_signal
             if buy_signal:
                 signal_type = "Buy"
-            elif sell_signal:
+            if sell_signal:
                 signal_type = "Sell"
-        
+            if buy_signal and sell_signal:
+                if buy_confidence >= sell_confidence:
+                    signal_type = "Buy"
+                    buy_signal = True
+                    sell_signal = False
+                else:
+                    signal_type = "Sell"
+                    buy_signal = False
+                    sell_signal = True
+        self.default_logger.debug(f"Level 7 for {stock_name}: Returned result=Buy:{buy_signal}, Sell:{sell_signal}, Buy_Conf:{buy_confidence}, signal_type:{signal_type}, Sell_Conf:{sell_confidence}")
         # =========================================================================
         # LEVEL 8: STORE RESULTS (if dictionaries provided)
         # =========================================================================
@@ -2229,14 +2420,14 @@ class ScreeningStatistics:
             saveDict["B/S"] = signal_type
             saveDict["Signal_Strength"] = signal_strength
             saveDict["Confidence"] = buy_confidence if buy_signal else sell_confidence if sell_signal else 0
-            
+            screenDict["Confidence"] = buy_confidence if buy_signal else sell_confidence if sell_signal else 0
             if result:
-                if buy_signal:
-                    screenDict["B/S"] = colorText.GREEN + f"{signal_type}[{int(buy_confidence)}]" + colorText.END
-                elif sell_signal:
-                    screenDict["B/S"] = colorText.FAIL + f"{signal_type}[{int(sell_confidence)}]" + colorText.END
+                if buy_signal and buy_confidence > 0:
+                    screenDict["B/S[%]"] = colorText.GREEN + f"{signal_type}[{int(buy_confidence)}]" + colorText.END
+                elif sell_signal and sell_confidence > 0:
+                    screenDict["B/S[%]"] = colorText.FAIL + f"{signal_type}[{int(sell_confidence)}]" + colorText.END
             else:
-                screenDict["B/S"] = colorText.WARN + "NA" + colorText.END
+                screenDict["B/S[%]"] = colorText.WARN + "NA" + colorText.END
         
         self.default_logger.debug(f"DEBUG: Returning result={result}, signal_type={signal_type}, buy_signal={buy_signal}, sell_signal={sell_signal}")
         return result, {}

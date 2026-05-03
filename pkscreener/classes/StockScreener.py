@@ -903,6 +903,7 @@ class StockScreener:
                                 buy_threshold=configManager.atrTrailingStopBuyThreshold,
                                 sell_threshold=configManager.atrTrailingStopSellThreshold,
                                 min_bars_between_signals=configManager.atrTrailingStopMinBarsBetweenSignals,
+                                min_bars_between_sell_signals=0,
                                 min_strength_for_confirmation=configManager.atrTrailingStopMinStrengthForConfirmation,
                                 stock_name=stock
                             )
@@ -973,7 +974,7 @@ class StockScreener:
                 )
         if not isLtpValid:
             raise ScreeningStatistics.LTPNotInConfiguredRange
-        if configManager.stageTwo and not verifyStageTwo and (executeOption > 0 and executeOption not in [29]):
+        if configManager.stageTwo and not verifyStageTwo and (executeOption > 0 and executeOption not in [29,30]):
             raise ScreeningStatistics.NotAStageTwoStock
 
     def updateStock(self, stock, screeningDictionary, saveDictionary, executeOption=0,exchangeName='INDIA',userArgs=None):
