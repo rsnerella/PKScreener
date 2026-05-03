@@ -273,20 +273,20 @@ jobs:
         echo "✅ Downloaded executable size: $FILE_SIZE bytes"
         chmod +x "$BINARY_NAME"
         
-        # Compress to save storage (700+ MB -> ~200 MB)
-        echo "🗜️ Compressing executable..."
-        gzip -c "$BINARY_NAME" > "$COMPRESSED_NAME"
+        # # Compress to save storage (700+ MB -> ~200 MB)
+        # echo "🗜️ Compressing executable..."
+        # gzip -c "$BINARY_NAME" > "$COMPRESSED_NAME"
         
-        # Verify compressed file was created
-        if [ ! -f "$COMPRESSED_NAME" ]; then
-          echo "ERROR: Failed to create compressed file"
-          exit 1
-        fi
+        # # Verify compressed file was created
+        # if [ ! -f "$COMPRESSED_NAME" ]; then
+        #   echo "ERROR: Failed to create compressed file"
+        #   exit 1
+        # fi
         
-        ORIGINAL_SIZE=$(stat -c%s "$BINARY_NAME")
-        COMPRESSED_SIZE=$(stat -c%s "$COMPRESSED_NAME")
-        RATIO=$(echo "scale=1; (1 - $COMPRESSED_SIZE/$ORIGINAL_SIZE) * 100" | bc)
-        echo "✅ Compression complete: $ORIGINAL_SIZE -> $COMPRESSED_SIZE bytes (${RATIO}% saved)"
+        # ORIGINAL_SIZE=$(stat -c%s "$BINARY_NAME")
+        # COMPRESSED_SIZE=$(stat -c%s "$COMPRESSED_NAME")
+        # RATIO=$(echo "scale=1; (1 - $COMPRESSED_SIZE/$ORIGINAL_SIZE) * 100" | bc)
+        # echo "✅ Compression complete: $ORIGINAL_SIZE -> $COMPRESSED_SIZE bytes (${RATIO}% saved)"
         
         echo "✅ Executable ready at: $BINARY_NAME"
 
@@ -318,20 +318,20 @@ jobs:
         
         echo "✅ Downloaded executable size: $FILE_SIZE bytes"
         
-        # Compress to save storage
-        echo "🗜️ Compressing executable..."
-        gzip -c "$BINARY_NAME" > "$COMPRESSED_NAME"
+        # # Compress to save storage
+        # echo "🗜️ Compressing executable..."
+        # gzip -c "$BINARY_NAME" > "$COMPRESSED_NAME"
         
-        # Verify compressed file was created
-        if [ ! -f "$COMPRESSED_NAME" ]; then
-          echo "ERROR: Failed to create compressed file"
-          exit 1
-        fi
+        # # Verify compressed file was created
+        # if [ ! -f "$COMPRESSED_NAME" ]; then
+        #   echo "ERROR: Failed to create compressed file"
+        #   exit 1
+        # fi
         
-        ORIGINAL_SIZE=$(stat -c%s "$BINARY_NAME")
-        COMPRESSED_SIZE=$(stat -c%s "$COMPRESSED_NAME")
-        RATIO=$(echo "scale=1; (1 - $COMPRESSED_SIZE/$ORIGINAL_SIZE) * 100" | bc)
-        echo "✅ Compression complete: $ORIGINAL_SIZE -> $COMPRESSED_SIZE bytes (${RATIO}% saved)"
+        # ORIGINAL_SIZE=$(stat -c%s "$BINARY_NAME")
+        # COMPRESSED_SIZE=$(stat -c%s "$COMPRESSED_NAME")
+        # RATIO=$(echo "scale=1; (1 - $COMPRESSED_SIZE/$ORIGINAL_SIZE) * 100" | bc)
+        # echo "✅ Compression complete: $ORIGINAL_SIZE -> $COMPRESSED_SIZE bytes (${RATIO}% saved)"
         
         echo "✅ Executable ready at: $BINARY_NAME"
 
