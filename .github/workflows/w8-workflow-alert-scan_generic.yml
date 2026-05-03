@@ -200,15 +200,31 @@ jobs:
         fi
 
     # ============================================================================
+    # SET PLATFORM-SPECIFIC EXECUTABLE NAMES
+    # ============================================================================
+    - name: Set executable names based on platform
+      id: exe-names
+      shell: bash
+      run: |
+        if [ "${{ runner.os }}" == "Linux" ]; then
+          echo "binary_name=pkscreenercli_x64.bin" >> $GITHUB_OUTPUT
+          echo "compressed_name=pkscreenercli_x64.bin.gz" >> $GITHUB_OUTPUT
+        elif [ "${{ runner.os }}" == "Windows" ]; then
+          echo "binary_name=pkscreenercli.exe" >> $GITHUB_OUTPUT
+          echo "compressed_name=pkscreenercli.exe.gz" >> $GITHUB_OUTPUT
+        elif [ "${{ runner.os }}" == "macOS" ]; then
+          echo "binary_name=pkscreenercli_macos" >> $GITHUB_OUTPUT
+          echo "compressed_name=pkscreenercli_macos.gz" >> $GITHUB_OUTPUT
+        fi
+
+    # ============================================================================
     # EXECUTABLE CACHING (Version-based, compressed)
     # ============================================================================
     - name: Cache PKScreener Executable (compressed)
       id: exe-cache
       uses: actions/cache@v4
       with:
-        path: |
-          pkscreenercli_x64.bin.gz
-          pkscreenercli.exe.gz
+        path: ${{ steps.exe-names.outputs.compressed_name }}
         key: exe-${{ runner.os }}-${{ steps.releaseurlsetter.outputs.VERSION }}
         restore-keys: |
           exe-${{ runner.os }}-${{ steps.releaseurlsetter.outputs.VERSION }}
@@ -223,8 +239,8 @@ jobs:
       env:
         exe_path: ${{ steps.releaseurlsetter.outputs.DOWNLOAD_URL }}
       run: |
-        BINARY_NAME="pkscreenercli_x64.bin"
-        COMPRESSED_NAME="${BINARY_NAME}.gz"
+        BINARY_NAME="${{ steps.exe-names.outputs.binary_name }}"
+        COMPRESSED_NAME="${{ steps.exe-names.outputs.compressed_name }}"
         
         echo "📦 Downloading executable from: $exe_path"
         curl -o "$BINARY_NAME" -JL "$exe_path"
@@ -265,9 +281,9 @@ jobs:
       env:
         exe_path: ${{ steps.releaseurlsetter.outputs.DOWNLOAD_URL }}
       run: |
-        BINARY_NAME="pkscreenercli.exe"
-        COMPRESSED_NAME="${BINARY_NAME}.gz"
-        
+        BINARY_NAME="${{ steps.exe-names.outputs.binary_name }}"
+        COMPRESSED_NAME="${{ steps.exe-names.outputs.compressed_name }}"
+
         echo "📦 Downloading executable from: $exe_path"
         curl -o "$BINARY_NAME" -JL "$exe_path"
         
@@ -305,8 +321,8 @@ jobs:
       if: (steps.exe-cache.outputs.cache-hit == 'true') && startsWith(runner.os, 'Linux') && steps.check-tensorflow.outputs.requires_tensorflow != 'true'
       shell: bash
       run: |
-        COMPRESSED_NAME="pkscreenercli_x64.bin.gz"
-        BINARY_NAME="pkscreenercli_x64.bin"
+        COMPRESSED_NAME="${{ steps.exe-names.outputs.compressed_name }}"
+        BINARY_NAME="${{ steps.exe-names.outputs.binary_name }}"
         
         echo "📦 Restoring executable from cache..."
         
@@ -330,8 +346,8 @@ jobs:
       if: (steps.exe-cache.outputs.cache-hit == 'true') && startsWith(runner.os, 'Windows') && steps.check-tensorflow.outputs.requires_tensorflow != 'true'
       shell: bash
       run: |
-        COMPRESSED_NAME="pkscreenercli.exe.gz"
-        BINARY_NAME="pkscreenercli.exe"
+        COMPRESSED_NAME="${{ steps.exe-names.outputs.compressed_name }}"
+        BINARY_NAME="${{ steps.exe-names.outputs.binary_name }}"
         
         echo "📦 Restoring executable from cache..."
         
@@ -358,9 +374,9 @@ jobs:
     #   shell: bash
     #   run: |
     #     if [ "${{ runner.os }}" == "Linux" ]; then
-    #       BINARY_NAME="pkscreenercli_x64.bin"
+    #       BINARY_NAME="${{ steps.exe-names.outputs.binary_name }}"
     #     else
-    #       BINARY_NAME="pkscreenercli.exe"
+    #       BINARY_NAME="${{ steps.exe-names.outputs.binary_name }}"
     #     fi
         
     #     echo "🔍 Validating executable: $BINARY_NAME"
