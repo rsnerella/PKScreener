@@ -218,23 +218,35 @@ jobs:
         fi
 
     # ============================================================================
-    # EXECUTABLE CACHING (Version-based, compressed)
+    # RESTORE EXECUTABLE CACHE (BEFORE SCAN)
     # ============================================================================
-    - name: Cache PKScreener Executable (compressed)
-      id: exe-cache
-      uses: actions/cache@v4
+    - name: Restore Executable Cache (before scan)
+      id: exe-cache-restore
+      uses: actions/cache/restore@v4
       with:
-        path: /home/runner/work/PKScreener/PKScreener/${{ steps.exe-names.outputs.compressed_name }}
+        path: ${{ steps.exe-names.outputs.compressed_name }}
         key: exe-${{ runner.os }}-${{ steps.releaseurlsetter.outputs.VERSION }}
         restore-keys: |
           exe-${{ runner.os }}-${{ steps.releaseurlsetter.outputs.VERSION }}
 
+    - name: Log executable cache restore status
+      shell: bash
+      run: |
+        echo "=== Executable Cache Restore Status ==="
+        echo "Cache hit: ${{ steps.exe-cache-restore.outputs.cache-hit }}"
+        if [ -f "${{ steps.exe-names.outputs.compressed_name }}" ]; then
+          FILE_SIZE=$(stat -c%s "${{ steps.exe-names.outputs.compressed_name }}" 2>/dev/null || stat -f%z "${{ steps.exe-names.outputs.compressed_name }}" 2>/dev/null)
+          echo "✅ Compressed executable restored from cache: $FILE_SIZE bytes"
+        else
+          echo "📦 No cached executable found - will download fresh"
+        fi
+
     # ============================================================================
-    # DOWNLOAD & COMPRESS EXECUTABLE (if not cached or cache miss)
+    # DOWNLOAD & COMPRESS EXECUTABLE (if not cached)
     # ============================================================================
     - name: Download and compress executable on Ubuntu
       id: download-exe-ubuntu
-      if: (steps.exe-cache.outputs.cache-hit != 'true') && startsWith(runner.os, 'Linux') && steps.check-tensorflow.outputs.requires_tensorflow != 'true'
+      if: (steps.exe-cache-restore.outputs.cache-hit != 'true') && startsWith(runner.os, 'Linux') && steps.check-tensorflow.outputs.requires_tensorflow != 'true'
       shell: bash
       env:
         exe_path: ${{ steps.releaseurlsetter.outputs.DOWNLOAD_URL }}
@@ -265,20 +277,22 @@ jobs:
         echo "🗜️ Compressing executable..."
         gzip -c "$BINARY_NAME" > "$COMPRESSED_NAME"
         
+        # Verify compressed file was created
+        if [ ! -f "$COMPRESSED_NAME" ]; then
+          echo "ERROR: Failed to create compressed file"
+          exit 1
+        fi
+        
         ORIGINAL_SIZE=$(stat -c%s "$BINARY_NAME")
         COMPRESSED_SIZE=$(stat -c%s "$COMPRESSED_NAME")
         RATIO=$(echo "scale=1; (1 - $COMPRESSED_SIZE/$ORIGINAL_SIZE) * 100" | bc)
         echo "✅ Compression complete: $ORIGINAL_SIZE -> $COMPRESSED_SIZE bytes (${RATIO}% saved)"
         
-        # Keep both original and compressed
-        echo "compressed_path=$COMPRESSED_NAME" >> $GITHUB_OUTPUT
-        echo "original_path=$BINARY_NAME" >> $GITHUB_OUTPUT
-        pwd
-        ls -a
+        echo "✅ Executable ready at: $BINARY_NAME"
 
     - name: Download and compress executable on Windows
       id: download-exe-windows
-      if: (steps.exe-cache.outputs.cache-hit != 'true') && startsWith(runner.os, 'Windows') && steps.check-tensorflow.outputs.requires_tensorflow != 'true'
+      if: (steps.exe-cache-restore.outputs.cache-hit != 'true') && startsWith(runner.os, 'Windows') && steps.check-tensorflow.outputs.requires_tensorflow != 'true'
       shell: bash
       env:
         exe_path: ${{ steps.releaseurlsetter.outputs.DOWNLOAD_URL }}
@@ -308,25 +322,36 @@ jobs:
         echo "🗜️ Compressing executable..."
         gzip -c "$BINARY_NAME" > "$COMPRESSED_NAME"
         
+        # Verify compressed file was created
+        if [ ! -f "$COMPRESSED_NAME" ]; then
+          echo "ERROR: Failed to create compressed file"
+          exit 1
+        fi
+        
         ORIGINAL_SIZE=$(stat -c%s "$BINARY_NAME")
         COMPRESSED_SIZE=$(stat -c%s "$COMPRESSED_NAME")
         RATIO=$(echo "scale=1; (1 - $COMPRESSED_SIZE/$ORIGINAL_SIZE) * 100" | bc)
         echo "✅ Compression complete: $ORIGINAL_SIZE -> $COMPRESSED_SIZE bytes (${RATIO}% saved)"
         
-        echo "compressed_path=$COMPRESSED_NAME" >> $GITHUB_OUTPUT
-        echo "original_path=$BINARY_NAME" >> $GITHUB_OUTPUT
+        echo "✅ Executable ready at: $BINARY_NAME"
 
     # ============================================================================
-    # RESTORE EXECUTABLE FROM CACHE (if cache hit)
+    # DECOMPRESS EXECUTABLE FOR USE (if cached)
     # ============================================================================
-    - name: Restore executable from cache (Ubuntu)
-      if: (steps.exe-cache.outputs.cache-hit == 'true') && startsWith(runner.os, 'Linux') && steps.check-tensorflow.outputs.requires_tensorflow != 'true'
+    - name: Decompress executable from cache (Ubuntu)
+      if: (steps.exe-cache-restore.outputs.cache-hit == 'true') && startsWith(runner.os, 'Linux') && steps.check-tensorflow.outputs.requires_tensorflow != 'true'
       shell: bash
       run: |
-        COMPRESSED_NAME="${{ steps.exe-names.outputs.compressed_name }}"
         BINARY_NAME="${{ steps.exe-names.outputs.binary_name }}"
+        COMPRESSED_NAME="${{ steps.exe-names.outputs.compressed_name }}"
         
-        echo "📦 Restoring executable from cache..."
+        echo "📦 Decompressing cached executable..."
+        
+        # Check if compressed file exists
+        if [ ! -f "$COMPRESSED_NAME" ]; then
+          echo "ERROR: Compressed file not found: $COMPRESSED_NAME"
+          exit 1
+        fi
         
         # Decompress
         gunzip -c "$COMPRESSED_NAME" > "$BINARY_NAME"
@@ -339,19 +364,23 @@ jobs:
         fi
         
         FILE_SIZE=$(stat -c%s "$BINARY_NAME")
-        echo "✅ Restored executable size: $FILE_SIZE bytes"
-        
-        # Store path for later steps
-        echo "original_path=$BINARY_NAME" >> $GITHUB_OUTPUT
+        echo "✅ Decompressed executable size: $FILE_SIZE bytes"
+        echo "✅ Executable ready at: $BINARY_NAME"
 
-    - name: Restore executable from cache (Windows)
-      if: (steps.exe-cache.outputs.cache-hit == 'true') && startsWith(runner.os, 'Windows') && steps.check-tensorflow.outputs.requires_tensorflow != 'true'
+    - name: Decompress executable from cache (Windows)
+      if: (steps.exe-cache-restore.outputs.cache-hit == 'true') && startsWith(runner.os, 'Windows') && steps.check-tensorflow.outputs.requires_tensorflow != 'true'
       shell: bash
       run: |
-        COMPRESSED_NAME="${{ steps.exe-names.outputs.compressed_name }}"
         BINARY_NAME="${{ steps.exe-names.outputs.binary_name }}"
+        COMPRESSED_NAME="${{ steps.exe-names.outputs.compressed_name }}"
         
-        echo "📦 Restoring executable from cache..."
+        echo "📦 Decompressing cached executable..."
+        
+        # Check if compressed file exists
+        if [ ! -f "$COMPRESSED_NAME" ]; then
+          echo "ERROR: Compressed file not found: $COMPRESSED_NAME"
+          exit 1
+        fi
         
         # Decompress
         gunzip -c "$COMPRESSED_NAME" > "$BINARY_NAME"
@@ -363,9 +392,8 @@ jobs:
         fi
         
         FILE_SIZE=$(stat -c%s "$BINARY_NAME")
-        echo "✅ Restored executable size: $FILE_SIZE bytes"
-        
-        echo "original_path=$BINARY_NAME" >> $GITHUB_OUTPUT
+        echo "✅ Decompressed executable size: $FILE_SIZE bytes"
+        echo "✅ Executable ready at: $BINARY_NAME"
 
     # ============================================================================
     # VALIDATE EXECUTABLE INTEGRITY
@@ -790,8 +818,38 @@ jobs:
     #     echo "corrupted_executable=true" >> $GITHUB_ENV
 
     # ============================================================================
+    # SAVE EXECUTABLE CACHE (AFTER SCAN - Only if we downloaded fresh)
+    # ============================================================================
+    - name: Save Executable Cache (after scan)
+      if: (steps.download-exe-ubuntu.outcome == 'success' || steps.download-exe-windows.outcome == 'success')
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ steps.exe-names.outputs.compressed_name }}
+        key: exe-${{ runner.os }}-${{ steps.releaseurlsetter.outputs.VERSION }}
+
+    - name: Log executable cache save status
+      if: (steps.download-exe-ubuntu.outcome == 'success' || steps.download-exe-windows.outcome == 'success')
+      shell: bash
+      run: |
+        echo "=== Executable Cache Save Status ==="
+        if [ -f "${{ steps.exe-names.outputs.compressed_name }}" ]; then
+          FILE_SIZE=$(stat -c%s "${{ steps.exe-names.outputs.compressed_name }}" 2>/dev/null || stat -f%z "${{ steps.exe-names.outputs.compressed_name }}" 2>/dev/null)
+          echo "💾 Saved compressed executable to cache: $FILE_SIZE bytes"
+        else
+          echo "⚠️ No compressed executable found to save"
+        fi
+
+    # ============================================================================
     # SAVE STOCK DATA CACHE (AFTER SCAN - Non-market hours only)
     # ============================================================================
+    - name: Save Stock Data Cache (after scan)
+      if: steps.market-hours-check.outputs.should_save_cache == 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: |
+          results/Data/
+        key: stock-data-${{ runner.os }}-${{ github.run_id }}-${{ github.run_number }}
+
     - name: Save Stock Data Cache (after scan)
       if: steps.market-hours-check.outputs.should_save_cache == 'true'
       uses: actions/cache/save@v4
