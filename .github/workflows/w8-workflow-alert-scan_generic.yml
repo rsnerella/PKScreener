@@ -224,7 +224,7 @@ jobs:
       id: exe-cache
       uses: actions/cache@v4
       with:
-        path: ${{ steps.exe-names.outputs.compressed_name }}
+        path: /home/runner/work/PKScreener/PKScreener/${{ steps.exe-names.outputs.compressed_name }}
         key: exe-${{ runner.os }}-${{ steps.releaseurlsetter.outputs.VERSION }}
         restore-keys: |
           exe-${{ runner.os }}-${{ steps.releaseurlsetter.outputs.VERSION }}
@@ -273,6 +273,8 @@ jobs:
         # Keep both original and compressed
         echo "compressed_path=$COMPRESSED_NAME" >> $GITHUB_OUTPUT
         echo "original_path=$BINARY_NAME" >> $GITHUB_OUTPUT
+        pwd
+        ls -a
 
     - name: Download and compress executable on Windows
       id: download-exe-windows
