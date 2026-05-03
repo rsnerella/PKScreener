@@ -115,6 +115,79 @@ jobs:
         fi
 
     # ============================================================================
+    # CHECK MARKET HOURS (IST: Monday-Friday 9:15 AM to 3:30 PM)
+    # ============================================================================
+    - name: Check if currently in market hours
+      id: market-hours-check
+      shell: bash
+      run: |
+        # Get current day of week (1=Monday, 5=Friday, 6=Saturday, 7=Sunday)
+        DAY_OF_WEEK=$(TZ='Asia/Kolkata' date +%u)
+        CURRENT_HOUR=$(TZ='Asia/Kolkata' date +%H)
+        CURRENT_MIN=$(TZ='Asia/Kolkata' date +%M)
+        CURRENT_TIME=$((10#$CURRENT_HOUR * 60 + 10#$CURRENT_MIN))
+        
+        # Market hours: 9:15 AM to 3:30 PM IST on weekdays
+        MARKET_OPEN=$((9 * 60 + 15))   # 9:15 AM
+        MARKET_CLOSE=$((15 * 60 + 30)) # 3:30 PM
+        
+        echo "Current IST time: $CURRENT_HOUR:$CURRENT_MIN, Day: $DAY_OF_WEEK"
+        echo "Market hours: Monday-Friday, 9:15 AM to 3:30 PM IST"
+        
+        # Check if it's a weekday (Monday=1 through Friday=5)
+        if [ $DAY_OF_WEEK -ge 1 ] && [ $DAY_OF_WEEK -le 5 ]; then
+          if [ $CURRENT_TIME -ge $MARKET_OPEN ] && [ $CURRENT_TIME -lt $MARKET_CLOSE ]; then
+            echo "🕒 MARKET HOURS ACTIVE - Will NOT use cached data"
+            echo "is_market_hours=true" >> $GITHUB_OUTPUT
+            echo "should_restore_cache=false" >> $GITHUB_OUTPUT
+            echo "should_save_cache=false" >> $GITHUB_OUTPUT
+          else
+            echo "🕒 Non-market hours - Will restore cached data before scan"
+            echo "is_market_hours=false" >> $GITHUB_OUTPUT
+            echo "should_restore_cache=true" >> $GITHUB_OUTPUT
+            echo "should_save_cache=true" >> $GITHUB_OUTPUT
+          fi
+        else
+          echo "🕒 Weekend - Will restore cached data before scan"
+          echo "is_market_hours=false" >> $GITHUB_OUTPUT
+          echo "should_restore_cache=true" >> $GITHUB_OUTPUT
+          echo "should_save_cache=true" >> $GITHUB_OUTPUT
+        fi
+
+    # ============================================================================
+    # RESTORE STOCK DATA CACHE (BEFORE SCAN - Non-market hours only)
+    # ============================================================================
+    - name: Restore Stock Data Cache (before scan)
+      if: steps.market-hours-check.outputs.should_restore_cache == 'true'
+      uses: actions/cache/restore@v4
+      id: stock-data-restore
+      with:
+        path: |
+          results/Data/
+        # Use a consistent key pattern to share cache across runs
+        key: stock-data-${{ runner.os }}-${{ github.run_id }}-${{ github.run_number }}
+        restore-keys: |
+          stock-data-${{ runner.os }}-
+          stock-data-
+
+    - name: Log cache restore status
+      if: steps.market-hours-check.outputs.should_restore_cache == 'true'
+      shell: bash
+      run: |
+        echo "=== Cache Restore Status ==="
+        echo "Cache hit: ${{ steps.stock-data-restore.outputs.cache-hit }}"
+        if [ -d "results/Data" ]; then
+          echo "Files restored from cache:"
+          ls -la results/Data/ 2>/dev/null || echo "Directory empty"
+          # Count files
+          PKL_COUNT=$(find results/Data -name "*.pkl" 2>/dev/null | wc -l)
+          JSON_COUNT=$(find results/Data -name "*.json" 2>/dev/null | wc -l)
+          echo "📊 Restored: $PKL_COUNT .pkl files, $JSON_COUNT .json files"
+        else
+          echo "No cached data restored - will download fresh"
+        fi
+
+    # ============================================================================
     # CACHING STRATEGY 1: Global pip cache (fast)
     # ============================================================================
     - name: Cache pip packages
@@ -395,48 +468,6 @@ jobs:
         
         echo "Created .env.dev file with secrets (values quoted)"
 
-    # Phase 2: Restore pre-cached stock data for faster scans (only during non-trading hours)
-  # - name: Check current time in IST
-  #   id: time-check
-  #   shell: bash
-  #   run: |
-  #     # Get current time in IST
-  #     CURRENT_HOUR=$(TZ='Asia/Kolkata' date +%H)
-  #     CURRENT_MIN=$(TZ='Asia/Kolkata' date +%M)
-  #     CURRENT_TIME=$((10#$CURRENT_HOUR * 60 + 10#$CURRENT_MIN))
-      
-  #     # Trading hours: 9:15 AM to 4:00 PM IST
-  #     MARKET_OPEN=$((9 * 60 + 15))  # 9:15 AM
-  #     MARKET_CLOSE=$((16 * 60 + 0))   # 4:00 PM
-      
-  #     echo "Current IST time: $CURRENT_HOUR:$CURRENT_MIN"
-  #     echo "Market open: 9:15, Market close: 16:00"
-      
-  #     if [ $CURRENT_TIME -ge $MARKET_OPEN ] && [ $CURRENT_TIME -lt $MARKET_CLOSE ]; then
-  #       echo "🕒 Market hours detected - skipping cache restore to ensure fresh data"
-  #       echo "USE_CACHE=false" >> $GITHUB_OUTPUT
-  #     else
-  #       echo "🕒 Non-market hours detected - using cached data for faster scans"
-  #       echo "USE_CACHE=true" >> $GITHUB_OUTPUT
-  #     fi
-
-  # - name: Restore Stock Data Cache (Non-market hours only)
-  #   if: steps.time-check.outputs.USE_CACHE == 'true'
-  #   uses: actions/cache@v4
-  #   with:
-  #     path: results/Data/
-  #     key: stock-data-${{ github.run_id }}
-  #     restore-keys: |
-  #       stock-data-
-          
-  # - name: Clear cache during market hours (optional)
-  #   if: steps.time-check.outputs.USE_CACHE == 'false'
-  #   shell: bash
-  #   run: |
-  #     echo "🧹 Market hours - ensuring fresh data by removing any cached stock data"
-  #     rm -rf results/Data/*.pkl results/Data/*.csv 2>/dev/null || true
-  #     echo "✓ Cache cleared for fresh market data"
-
     - name: Create session file
       run: |
         echo ${{ secrets.TEL_SESSION_DATA }} | base64 -d > user_session.session
@@ -462,6 +493,9 @@ jobs:
         
         echo "✓ TensorFlow environment configured"
 
+    # ============================================================================
+    # RUN SCAN (This will download new pkl/json files if not cached)
+    # ============================================================================
     - name: Run Scan on Windows
       shell: cmd
       timeout-minutes: 10
@@ -507,3 +541,29 @@ jobs:
         cd /home/runner/work/PKScreener/PKScreener/
         python3 pkscreener/pkscreenercli.py ${{ inputs.params }}
         ${{ inputs.postrun }}
+
+    # ============================================================================
+    # SAVE STOCK DATA CACHE (AFTER SCAN - Non-market hours only)
+    # ============================================================================
+    - name: Save Stock Data Cache (after scan)
+      if: steps.market-hours-check.outputs.should_save_cache == 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: |
+          results/Data/
+        key: stock-data-${{ runner.os }}-${{ github.run_id }}-${{ github.run_number }}
+
+    - name: Log cache save status
+      if: steps.market-hours-check.outputs.should_save_cache == 'true'
+      shell: bash
+      run: |
+        echo "=== Cache Save Status ==="
+        if [ -d "results/Data" ]; then
+          PKL_COUNT=$(find results/Data -name "*.pkl" 2>/dev/null | wc -l)
+          JSON_COUNT=$(find results/Data -name "*.json" 2>/dev/null | wc -l)
+          echo "💾 Saved $PKL_COUNT .pkl files and $JSON_COUNT .json files to cache"
+          echo "Files in results/Data:"
+          ls -la results/Data/
+        else
+          echo "⚠️ No data directory found to cache"
+        fi
