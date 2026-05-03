@@ -32,14 +32,43 @@ if [[ $(uname) == "Darwin" ]]; then
         # https://github.com/scipy/scipy/issues/14688
         # We use the same deployment target to match SciPy.
         export MACOSX_DEPLOYMENT_TARGET=13.0
-        OPENMP_URL="https://anaconda.org/conda-forge/llvm-openmp/11.1.0/download/osx-arm64/llvm-openmp-11.1.0-hf3c4609_1.tar.bz2"
     else
         export MACOSX_DEPLOYMENT_TARGET=10.9
-        OPENMP_URL="https://anaconda.org/conda-forge/llvm-openmp/11.1.0/download/osx-64/llvm-openmp-11.1.0-hda6cdc1_1.tar.bz2"
     fi
 
-    sudo conda create -n build $OPENMP_URL
-    PREFIX="$CONDA_HOME/envs/build"
+    # Alternative: Install OpenMP via pip (intel-openmp)
+    # This is more reliable in CI environments without conda
+    echo "Installing OpenMP via pip..."
+    pip3 install intel-openmp
+    
+    # For ARM64, we also need the specific wheel
+    if [[ "$CIBW_BUILD" == *-macosx_arm64 ]]; then
+        pip3 install --no-deps intel-openmp
+    fi
+    
+    # Set up paths for OpenMP from pip installation
+    SITE_PACKAGES=$(python3 -c "import site; print(site.getsitepackages()[0])")
+    echo "Site packages: $SITE_PACKAGES"
+    
+    # Find OpenMP library
+    if [ -f "$SITE_PACKAGES/intel_openmp/lib/libiomp5.dylib" ]; then
+        PREFIX="$SITE_PACKAGES/intel_openmp"
+        echo "OpenMP found in intel_openmp package"
+    elif [ -f "$SITE_PACKAGES/lib/libiomp5.dylib" ]; then
+        PREFIX="$SITE_PACKAGES"
+        echo "OpenMP found in site packages lib"
+    else
+        # Try to find it
+        find $SITE_PACKAGES -name "*iomp5*" -o -name "*libomp*" 2>/dev/null || true
+        # Fall back to brew if pip fails
+        echo "Pip OpenMP not found, trying Homebrew..."
+        brew install libomp
+        if [[ "$CIBW_BUILD" == *-macosx_arm64 ]]; then
+            PREFIX="/opt/homebrew"
+        else
+            PREFIX="/usr/local"
+        fi
+    fi
 
     export CC=/usr/bin/clang
     export CXX=/usr/bin/clang++
@@ -47,6 +76,11 @@ if [[ $(uname) == "Darwin" ]]; then
     export CFLAGS="$CFLAGS -I$PREFIX/include"
     export CXXFLAGS="$CXXFLAGS -I$PREFIX/include"
     export LDFLAGS="$LDFLAGS -Wl,-rpath,$PREFIX/lib -L$PREFIX/lib -lomp"
+    
+    echo "OpenMP environment configured:"
+    echo "  PREFIX: $PREFIX"
+    echo "  CFLAGS: $CFLAGS"
+    echo "  LDFLAGS: $LDFLAGS"
 fi
 
 
@@ -58,13 +92,6 @@ if [[ "$GITHUB_EVENT_NAME" == "schedule" || "$CIRRUS_CRON" == "nightly" ]]; then
     # NumPy install may be necessary, instead.
     export CIBW_BUILD_FRONTEND='pip; args: --pre --extra-index-url "https://pypi.anaconda.org/scientific-python-nightly-wheels/simple"'
 fi
-
-# The version of the built dependencies are specified
-# in the pyproject.toml file, while the tests are run
-# against the most recent version of the dependencies
-
-# python -m pip install cibuildwheel
-# python -m cibuildwheel --output-dir wheelhouse
 
 pip3 install setuptools wheel twine
 python setup.py clean build sdist bdist_wheel
