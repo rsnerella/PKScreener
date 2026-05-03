@@ -1,7 +1,6 @@
 -r requirements.txt
 
 black
-coverage==7.5.1
 coveralls
 distro
 isort
