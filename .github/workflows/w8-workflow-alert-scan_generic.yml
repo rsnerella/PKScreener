@@ -782,8 +782,11 @@ jobs:
       run: |
         ${{ inputs.prerequisites }}
         # pip install libsql
-        /home/runner/work/PKScreener/PKScreener/pkscreenercli_x64.bin ${{ inputs.params }}
+        /home/runner/work/PKScreener/PKScreener/pkscreenercli_x64.bin ${{ inputs.params }} -l
         ${{ inputs.postrun }}
+        cat /home/runner/work/PKScreener/PKScreener/results/Data/pkscreener-logs.txt
+        pwd
+        ls -l
 
     - name: Run Scan on Ubuntu from source with TensorFlow (if required)
       shell: bash
@@ -831,8 +834,9 @@ jobs:
       if: (steps.download-exe-ubuntu.outcome == 'success' || steps.download-exe-windows.outcome == 'success')
       shell: bash
       run: |
+        ls -l
         echo "=== Executable Cache Save Status ==="
-        if [ -f cd /home/runner/work/PKScreener/PKScreener/${{ steps.exe-names.outputs.compressed_name }}" ]; then
+        if [ -f /home/runner/work/PKScreener/PKScreener/"${{ steps.exe-names.outputs.compressed_name }}" ]; then
           FILE_SIZE=$(stat -c%s "${{ steps.exe-names.outputs.compressed_name }}" 2>/dev/null || stat -f%z "${{ steps.exe-names.outputs.compressed_name }}" 2>/dev/null)
           echo "💾 Saved compressed executable to cache: $FILE_SIZE bytes"
         else
