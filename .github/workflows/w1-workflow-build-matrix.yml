@@ -547,6 +547,8 @@ jobs:
         timeout-minutes: 1
         continue-on-error: true
         run: ${{ matrix.TEST_BUILD }}
+        env:
+          RUNNER : 1
 
       - name: Save Binaries as Artifacts
         uses: actions/upload-artifact@v4

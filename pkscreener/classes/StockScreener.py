@@ -755,28 +755,28 @@ class StockScreener:
             # Capturing Ctr+C Here isn't a great idea
             pass
         except StockDataEmptyException as e: # pragma: no cover
-            if data is None or (data is not None and not data.isnull().values.all(axis=0)[0]):
-                hostRef.default_logger.debug(f"StockDataEmptyException:{stock}: {e}", exc_info=True)
+            # if data is None or (data is not None and not data.isnull().values.all(axis=0)[0]):
+            #     hostRef.default_logger.debug(f"StockDataEmptyException:{stock}: {e}", exc_info=True)
             pass
         except ScreeningStatistics.EligibilityConditionNotMet as e: # pragma: no cover
-            if userArgsLog:
-                hostRef.default_logger.debug(f"EligibilityConditionNotMet:{stock}: {e}", exc_info=True)
+            # if userArgsLog:
+            #     hostRef.default_logger.debug(f"EligibilityConditionNotMet:{stock}: {e}", exc_info=True)
             pass
         except ScreeningStatistics.NotNewlyListed as e: # pragma: no cover
-            if userArgsLog:
-                hostRef.default_logger.debug(f"NotNewlyListed:{stock}: {e}", exc_info=True)
+                # if userArgsLog:
+                #     hostRef.default_logger.debug(f"NotNewlyListed:{stock}: {e}", exc_info=True)
             pass
         except ScreeningStatistics.NotAStageTwoStock as e: # pragma: no cover
-            if userArgsLog:
-                hostRef.default_logger.debug(f"NotAStageTwoStock:{stock}: {e}", exc_info=True)
+            # if userArgsLog:
+            #     hostRef.default_logger.debug(f"NotAStageTwoStock:{stock}: {e}", exc_info=True)
             pass
         except ScreeningStatistics.NotEnoughVolumeAsPerConfig as e: # pragma: no cover 
-            if userArgsLog:
-                hostRef.default_logger.debug(f"NotEnoughVolumeAsPerConfig:{stock}: {e}", exc_info=True)
+            # if userArgsLog:
+            #     hostRef.default_logger.debug(f"NotEnoughVolumeAsPerConfig:{stock}: {e}", exc_info=True)
             pass
         except ScreeningStatistics.DownloadDataOnly as e: # pragma: no cover
-            if userArgsLog:
-                hostRef.default_logger.debug(f"DownloadDataOnly:{stock}: {e}", exc_info=True)
+            # if userArgsLog:
+            #     hostRef.default_logger.debug(f"DownloadDataOnly:{stock}: {e}", exc_info=True)
             try:
                 data = hostRef.objectDictionaryPrimary.get(stock)
                 if data is not None:
@@ -817,32 +817,32 @@ class StockScreener:
                 pass
             pass
         except ScreeningStatistics.LTPNotInConfiguredRange as e: # pragma: no cover
-            if userArgsLog:
-                hostRef.default_logger.debug(f"LTPNotInConfiguredRange:{stock}: {e}", exc_info=True)
+                # if userArgsLog:
+                #     hostRef.default_logger.debug(f"LTPNotInConfiguredRange:{stock}: {e}", exc_info=True)
             pass
         except KeyError as e: # pragma: no cover
-            if userArgsLog:
-                hostRef.default_logger.debug(f"KeyError:{stock}: {e}", exc_info=True)
+                # if userArgsLog:
+                #     hostRef.default_logger.debug(f"KeyError:{stock}: {e}", exc_info=True)
             pass
         except OSError as e: # pragma: no cover
-            if userArgsLog:
-                hostRef.default_logger.debug(f"OSError:{stock}: {e}", exc_info=True)
+            # if userArgsLog:
+            #     hostRef.default_logger.debug(f"OSError:{stock}: {e}", exc_info=True)
             pass
         except Exception as e:  # pragma: no cover
-            if userArgsLog:
-                hostRef.default_logger.debug(f"Exception:{stock}: {e}", exc_info=True)
-            if testbuild or printCounter:
-                import traceback
-                traceback.print_exc()
-                OutputControls().printOutput(e)
-                OutputControls().printOutput(
-                    colorText.FAIL
-                    + (
-                        "\n  [+] Exception Occured while Screening %s! Skipping this stock.."
-                        % stock
-                    )
-                    + colorText.END
+            if hostRef.default_logger:
+                hostRef.default_logger.error(f"Exception:{stock}: {e}", exc_info=True)
+            # if testbuild or printCounter:
+            import traceback
+            traceback.print_exc()
+            OutputControls().printOutput(e)
+            OutputControls().printOutput(
+                colorText.FAIL
+                + (
+                    "\n  [+] Exception Occured while Screening %s! Skipping this stock.."
+                    % stock
                 )
+                + colorText.END
+            )
         return None
 
     def performValidityCheckForExecuteOptions(self,stock,hostRef,executeOption,screener,fullData,screeningDictionary,saveDictionary,processedData,configManager,subMenuOption=3,intraday_data=None):
