@@ -78,7 +78,16 @@ pyrate_limiter>=2.10.0
 urllib3>=1.26.20
 
 # Backtesting and trading
-vectorbt>=0.26.2
+vectorbt==0.28.1
+
+# ============================================================================
+# VECTORBT DEPENDENCIES - Pin to compatible versions to avoid coverage/numba issues
+# The coverage 7.x+ removed coverage.types.Tracer which numba needs
+# These versions work together with vectorbt 0.26.2
+# ============================================================================
+numba==0.61.2
+llvmlite==0.44.0
+coverage==7.13.0
 
 setuptools>=78.1.1
 # Note: pandas-ta-classic is excluded due to numpy>=2.0.0 requirement

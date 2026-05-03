@@ -113,6 +113,12 @@ jobs:
             TARGET: Windows
             CMD_BUILD: |
               pyinstaller --onefile `
+                --hidden-import numba `
+                --hidden-import llvmlite `
+                --hidden-import coverage `
+                --collect-all numba `
+                --collect-all llvmlite `
+                --collect-all coverage `
                 --add-data="README.md;." `
                 --add-data="LICENSE;." `
                 --add-data="docs\LICENSE-Others;." `
@@ -174,6 +180,12 @@ jobs:
             TARGET: Linux
             CMD_BUILD: |
               pyinstaller --onefile \
+                --hidden-import numba \
+                --hidden-import llvmlite \
+                --hidden-import coverage \
+                --collect-all numba \
+                --collect-all llvmlite \
+                --collect-all coverage \
                 --add-data="README.md:." \
                 --add-data="LICENSE:." \
                 --add-data="docs/LICENSE-Others:." \
@@ -235,6 +247,12 @@ jobs:
             TARGET: Linux
             CMD_BUILD: |
               pyinstaller --onefile \
+                --hidden-import numba \
+                --hidden-import llvmlite \
+                --hidden-import coverage \
+                --collect-all numba \
+                --collect-all llvmlite \
+                --collect-all coverage \
                 --add-data="README.md:." \
                 --add-data="LICENSE:." \
                 --add-data="docs/LICENSE-Others:." \
@@ -296,6 +314,12 @@ jobs:
             TARGET: MacOS
             CMD_BUILD: |
               pyinstaller --onefile --windowed \
+                --hidden-import numba \
+                --hidden-import llvmlite \
+                --hidden-import coverage \
+                --collect-all numba \
+                --collect-all llvmlite \
+                --collect-all coverage \
                 --add-data="README.md:." \
                 --add-data="LICENSE:." \
                 --add-data="docs/LICENSE-Others:." \
@@ -353,6 +377,12 @@ jobs:
             TARGET: MacOS
             CMD_BUILD: |
               pyinstaller --onefile --windowed \
+                --hidden-import numba \
+                --hidden-import llvmlite \
+                --hidden-import coverage \
+                --collect-all numba \
+                --collect-all llvmlite \
+                --collect-all coverage \
                 --add-data="README.md:." \
                 --add-data="LICENSE:." \
                 --add-data="docs/LICENSE-Others:." \

@@ -785,6 +785,11 @@ jobs:
         /home/runner/work/PKScreener/PKScreener/pkscreenercli_x64.bin ${{ inputs.params }} -l
         ${{ inputs.postrun }}
         cat /home/runner/work/PKScreener/PKScreener/results/Data/pkscreener-logs.txt
+        BINARY_NAME="${{ steps.exe-names.outputs.binary_name }}"
+        COMPRESSED_NAME="${{ steps.exe-names.outputs.compressed_name }}"
+        # Compress to save storage (700+ MB -> ~200 MB)
+        echo "🗜️ Compressing executable..."
+        gzip -c "$BINARY_NAME" > "$COMPRESSED_NAME"
         pwd
         ls -l
 
@@ -824,14 +829,14 @@ jobs:
     # SAVE EXECUTABLE CACHE (AFTER SCAN - Only if we downloaded fresh)
     # ============================================================================
     - name: Save Executable Cache (after scan)
-      if: (steps.download-exe-ubuntu.outcome == 'success' || steps.download-exe-windows.outcome == 'success')
+      if: (steps.download-exe-ubuntu.outcome == 'success' || steps.download-exe-windows.outcome == 'success') && steps.check-tensorflow.outputs.requires_tensorflow != 'true'
       uses: actions/cache/save@v4
       with:
         path: /home/runner/work/PKScreener/PKScreener/${{ steps.exe-names.outputs.compressed_name }}
         key: exe-${{ runner.os }}-${{ steps.releaseurlsetter.outputs.VERSION }}
 
     - name: Log executable cache save status
-      if: (steps.download-exe-ubuntu.outcome == 'success' || steps.download-exe-windows.outcome == 'success')
+      if: (steps.download-exe-ubuntu.outcome == 'success' || steps.download-exe-windows.outcome == 'success') && steps.check-tensorflow.outputs.requires_tensorflow != 'true'
       shell: bash
       run: |
         ls -l
