@@ -122,7 +122,7 @@ def marketStatus(instrument_id=256265, prefix=""):
             if timestamp_str.endswith('Z'):
                 timestamp_str = timestamp_str.replace('Z', '+00:00')
             dt = datetime.fromisoformat(timestamp_str)
-            date_formatted = dt.strftime("%y-%m-%d")
+            date_formatted = dt.strftime("%Y-%m-%d")
             time_formatted = dt.strftime("%H:%M")
         else:
             date_formatted = "N/A"
