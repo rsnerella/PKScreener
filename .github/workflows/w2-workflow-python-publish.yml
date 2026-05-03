@@ -169,96 +169,77 @@ jobs:
         with:
           python-version: "3.12" # update once build dependencies are available
 
-      # - name: Activate virtualenv for MacOS
-      #   if: startsWith(runner.os, 'MacOS')
-      #   run: |
-      #     python3 -m venv venv
-      #     source venv/bin/activate
-      #     echo PATH=$PATH >> $GITHUB_ENV
-  
-      - name: Install conda for macos arm64
-        if: ${{ matrix.platform_id == 'macosx_arm64' }}
-        run: |
-          set -ex
-          # macos arm64 runners do not have conda installed. Thus we must install conda manually
-          MINIFORGE_URL="https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-MacOSX-arm64.sh"
-          curl -L --retry 10 $MINIFORGE_URL -o miniforge.sh
-
-          # Install miniforge
-          MINIFORGE_PATH=$HOME/miniforge
-          bash ./miniforge.sh -b -p $MINIFORGE_PATH
-          echo "$MINIFORGE_PATH/bin" >> $GITHUB_PATH
-          echo "CONDA_HOME=$MINIFORGE_PATH" >> $GITHUB_ENV
-          
-          # Create Python 3.12 environment
-          source $MINIFORGE_PATH/bin/activate
-          conda create -n py312 python=3.12 -y
-          conda activate py312
-          echo "$MINIFORGE_PATH/envs/py312/bin" >> $GITHUB_PATH
-
-      - name: Install conda for macos x86_64
+      # ============================================================================
+      # TA-LIB INSTALLATION FOR MACOS (using brew)
+      # ============================================================================
+      - name: Install TA-Lib for macOS x86_64
         if: ${{ matrix.platform_id == 'macosx_x86_64' }}
         run: |
-          set -ex
-          # macos x64: install conda manually with Python 3.12
-          MINIFORGE_URL="https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-MacOSX-x86_64.sh"
-          curl -L --retry 10 $MINIFORGE_URL -o miniforge.sh
+          brew install ta-lib
+          brew upgrade ta-lib
+          arch -x86_64 brew install ta-lib
+          echo "TA_INCLUDE_PATH=$(brew --prefix ta-lib)/include" >> $GITHUB_ENV
+          echo "TA_LIBRARY_PATH=$(brew --prefix ta-lib)/lib" >> $GITHUB_ENV
 
-          # Install miniforge
-          MINIFORGE_PATH=$HOME/miniforge
-          bash ./miniforge.sh -b -p $MINIFORGE_PATH
-          echo "$MINIFORGE_PATH/bin" >> $GITHUB_PATH
-          echo "CONDA_HOME=$MINIFORGE_PATH" >> $GITHUB_ENV
-          
-          # Create Python 3.12 environment
-          source $MINIFORGE_PATH/bin/activate
-          conda create -n py312 python=3.12 -y
-          conda activate py312
-          echo "$MINIFORGE_PATH/envs/py312/bin" >> $GITHUB_PATH
-          
-      - name: Set conda environment for non-macos arm64 environments
-        if: ${{ matrix.platform_id != 'macosx_arm64' && matrix.platform_id != 'macosx_x86_64'}}
+      - name: Install TA-Lib for macOS arm64
+        if: ${{ matrix.platform_id == 'macosx_arm64' }}
         run: |
-          # Non-macos arm64 environments already have conda installed
-          echo "CONDA_HOME=/usr/local/miniconda" >> $GITHUB_ENV
+          brew install ta-lib
+          brew upgrade ta-lib
+          arch -arm64 brew install ta-lib
+          echo "TA_INCLUDE_PATH=$(brew --prefix ta-lib)/include" >> $GITHUB_ENV
+          echo "TA_LIBRARY_PATH=$(brew --prefix ta-lib)/lib" >> $GITHUB_ENV
 
-      # - name: Install conda
-      #   if: ${{ matrix.platform_id == 'macosx_x86_64' }}
-      #   uses: conda-incubator/setup-miniconda@v3
-      #   with:
-      #     miniconda-version: "latest"
-      #     channels: bioconda, conda-forge, defaults
-      #     use-only-tar-bz2: true  # IMPORTANT: This needs to be set for caching to work properly!
-      #     auto-update-conda: true
-      #     auto-activate-base: true
-      #     python-version: "3.12"
-
-      # - name: Install TA-Lib
-      #   shell: bash
-      #   if: ${{ matrix.platform_id == 'win_amd64' }}
-      #   run: |
-      #     python3 -m pip install --upgrade pip
-      #     cd .github/dependencies/
-      #     pip3 install TA_Lib-0.4.29-cp${{ matrix.python }}-cp${{ matrix.python }}-win_amd64.whl
-
-      - name: Install Python Dependencies for ${{ matrix.TARGET }}
-        if: ${{ matrix.platform_id != 'win_amd64' }}
-        run: |
-          # Install numba via conda for macOS to avoid llvmlite build issues
-          if [[ "${{ matrix.platform_id }}" == "macosx_x86_64" || "${{ matrix.platform_id }}" == "macosx_arm64" ]]; then
-            source $CONDA_HOME/bin/activate py312
-            conda install -y numba llvmlite -c conda-forge
-          fi
-          pip3 install -r requirements.txt
-          pip3 install -r requirements-dev.txt
-      
-      - name: Install Python Dependencies for ${{ matrix.TARGET }}
+      # ============================================================================
+      # PYTHON DEPENDENCY INSTALLATION (pip only - no conda)
+      # ============================================================================
+      - name: Install Python Dependencies - Windows
         if: ${{ matrix.platform_id == 'win_amd64' }}
         run: |
           pip3.12 install https://github.com/pkjmesra/libsql-python/releases/download/released/libsql-0.1.6-cp312-cp312-win_amd64.whl
           pip3 install -r requirements.txt
           pip3 install -r requirements-dev.txt
 
+      - name: Install Python Dependencies - Linux
+        if: ${{ matrix.platform_id == 'manylinux_x86_64' }}
+        run: |
+          cd .github/dependencies/
+          sudo dpkg -i ta-lib_0.6.4_amd64.deb
+          cd /home/runner/work/PKScreener/PKScreener/
+          pip3 install -r requirements.txt
+          pip3 install -r requirements-dev.txt
+          pip3 install libsql
+
+      - name: Install Python Dependencies - macOS (pip only)
+        if: ${{ matrix.platform_id == 'macosx_x86_64' || matrix.platform_id == 'macosx_arm64' }}
+        run: |
+          echo "🖥️ macOS detected - installing with pip only (no conda)"
+          
+          # Uninstall any conflicting packages if present
+          pip3 uninstall -y numba llvmlite numpy scipy coverage || true
+          
+          # Install pinned versions first (matching requirements.txt)
+          pip3 install numpy==1.26.4
+          pip3 install scipy==1.12.0
+          pip3 install llvmlite==0.44.0
+          pip3 install numba==0.61.2
+          pip3 install coverage==7.13.0
+          
+          # Install TA-Lib via pip (brew already installed the library)
+          if [[ "${{ matrix.platform_id }}" == "macosx_x86_64" ]]; then
+            pip3 install --no-cache-dir ta-lib --no-binary=ta-lib
+          else
+            pip3 install --no-cache-dir ta-lib --no-binary=ta-lib
+          fi
+          
+          # Install the rest of the requirements
+          pip3 install -r requirements.txt
+          pip3 install -r requirements-dev.txt
+          pip3 install libsql
+
+      # ============================================================================
+      # VERSION MANAGEMENT
+      # ============================================================================
       - name: Declare env variables
         id: vars
         shell: bash
@@ -287,6 +268,9 @@ jobs:
         run: |
           pip3 install setuptools wheel twine
 
+      # ============================================================================
+      # BUILD WHEELS
+      # ============================================================================
       - name: Build and test wheels
         env:
           CIBW_BUILD: cp${{ matrix.python }}-${{ matrix.platform_id }}
@@ -305,23 +289,10 @@ jobs:
         if: ${{ matrix.platform_id == 'manylinux_x86_64' }}
         run: |
           mv dist/pkscreener-${{ steps.vars.outputs.THIS_VERSION }}-cp${{ matrix.python }}-cp${{ matrix.python }}-linux_x86_64.whl dist/pkscreener-${{ steps.vars.outputs.THIS_VERSION }}-cp${{ matrix.python }}-cp${{ matrix.python }}-manylinux2014_x86_64.whl
-          # pip3 install auditwheel
-          # ls -l dist/
-          # auditwheel -v repair dist/pkscreener-${{ steps.vars.outputs.THIS_VERSION }}-cp${{ matrix.python }}-cp${{ matrix.python }}-linux_x86_64.whl --plat manylinux2014_x86_64
-          # rm -rf dist/pkscreener-${{ steps.vars.outputs.THIS_VERSION }}-cp${{ matrix.python }}-cp${{ matrix.python }}-linux_x86_64.whl
 
-      # - name: Create macOS x64 wheels from compatible versions
-      #   shell: bash
-      #   if: ${{ matrix.platform_id == 'macosx_x86_64' }}
-      #   run: |
-      #     cp dist/pkscreener-${{ steps.vars.outputs.THIS_VERSION }}-cp310-cp310-macosx_10_9_x86_64.whl dist/pkscreener-${{ steps.vars.outputs.THIS_VERSION }}-cp${{ matrix.python }}-cp${{ matrix.python }}-macosx_10_9_x86_64.whl
-
-      # - name: Create macOS arm64 wheels from compatible versions
-      #   shell: bash
-      #   if: ${{ matrix.platform_id == 'macosx_arm64' }}
-      #   run: |
-      #     cp dist/pkscreener-${{ steps.vars.outputs.THIS_VERSION }}-cp310-cp310-macosx_13_0_arm64.whl dist/pkscreener-${{ steps.vars.outputs.THIS_VERSION }}-cp${{ matrix.python }}-cp${{ matrix.python }}-macosx_13_0_arm64.whl 
-    
+      # ============================================================================
+      # PUBLISH TO PYPI
+      # ============================================================================
       - name: Build and publish distribution 📦 to Test PyPI
         env:
           TWINE_USERNAME: ${{ secrets.TESTPYPI_USERNAME }}
@@ -329,8 +300,6 @@ jobs:
           repository_url: https://test.pypi.org/legacy/
         shell: bash
         run: |
-          # del /s /q pkscreener/classes/__init__.py
-          # echo VERSION='${{ steps.vars.outputs.THIS_VERSION }}' >> pkscreener/classes/__init__.py
           twine upload --verbose --repository-url https://test.pypi.org/legacy/ dist/*.whl
 
       - name: Publish distribution 📦 to PyPI
@@ -340,8 +309,6 @@ jobs:
           repository_url: https://upload.pypi.org/legacy/
         shell: bash
         run: |
-          # del /s /q pkscreener/classes/__init__.py
-          # echo VERSION='${{ steps.vars.outputs.THIS_VERSION }}' >> pkscreener/classes/__init__.py
           twine upload --verbose dist/*.whl
 
       - name: Build and publish source code 📦 to Test PyPI
@@ -352,8 +319,6 @@ jobs:
         shell: bash
         if: ${{ matrix.platform_id == 'manylinux_x86_64' && matrix.python == '312' }}
         run: |
-          # del /s /q pkscreener/classes/__init__.py
-          # echo VERSION='${{ steps.vars.outputs.THIS_VERSION }}' >> pkscreener/classes/__init__.py
           twine upload --verbose --repository-url https://test.pypi.org/legacy/ dist/*.tar.gz
   
       - name: Publish source code 📦 to PyPI
@@ -364,10 +329,11 @@ jobs:
           repository_url: https://upload.pypi.org/legacy/
         shell: bash
         run: |
-          # del /s /q pkscreener/classes/__init__.py
-          # echo VERSION='${{ steps.vars.outputs.THIS_VERSION }}' >> pkscreener/classes/__init__.py
           twine upload --verbose dist/*.tar.gz
 
+      # ============================================================================
+      # TELEGRAM NOTIFICATION
+      # ============================================================================
       - name: Configure .env.dev file for Prod
         shell: bash
         if: ${{ inputs.sendNotification != 'no' }}
@@ -459,6 +425,9 @@ jobs:
           pip3 install .
           python3 -c "import os; from PKDevTools.classes.Telegram import send_message; send_message('Dear Channel!\nA new version of PKScreener (v' + os.environ['RELEASE_VERSION'] + ') just got released. Check it out at \n\nhttps://github.com/pkjmesra/PKScreener/releases\n or https://pypi.org/project/pkscreener/ \n\n'+os.environ['WHATS_NEW']+'\n');"
 
+      # ============================================================================
+      # UPLOAD ARTIFACTS
+      # ============================================================================
       - uses: actions/upload-artifact@v4
         with:
           name: wheels-cp${{ matrix.python }}-${{ matrix.platform_id }}-${{ matrix.manylinux_image }}
