@@ -91,6 +91,7 @@ class ScreeningStatistics:
         self.default_logger = default_logger
         self.shouldLog = shouldLog
         self.setupLogger(self.default_logger.level)
+        pd.options.mode.chained_assignment = None  # 'warn' or 'raise' or None
 
     def setupLogger(self, log_level):
         if log_level > 0:
@@ -176,8 +177,9 @@ class ScreeningStatistics:
         entries = final[final["Buy_Signal"] | final["Sell_Signal"]]
         high_confidence = entries[entries["Confidence"] == "HIGH"]
     """
-    def computeBuySellSignals(self, df, ema_period=200, retry=True, confirmation_bars=1, min_strength=2, 
-                            volume_confirmation=True, stock_name="Unknown"):
+
+    def computeBuySellSignals(self, df_src, ema_period=200, retry=True, confirmation_bars=1, min_strength=2, 
+                        volume_confirmation=True, stock_name="Unknown"):
         """
         Compute basic Buy/Sell signals based on ATR Trailing Stop with confirmation filters.
         
@@ -185,56 +187,225 @@ class ScreeningStatistics:
         with configurable confirmation levels. It's best for general purpose screening
         and daily scanning.
         
-        Key Features:
-        -------------
-        - ATR-based trailing stop for dynamic support/resistance
-        - EMA crossover for trend direction
-        - Optional volume confirmation to filter false breakouts
-        - Consecutive bar confirmation to reduce whipsaws
-        - Signal strength scoring (1-3 scale)
-        - Confidence scoring (0-100)
+        ============================================================================
+        SIGNAL TYPES
+        ============================================================================
+        
+        The method generates TWO types of signals:
+        
+        1. BUY Signals - When price crosses ABOVE the ATR Trailing Stop
+        - Indicates potential uptrend start
+        - Price momentum positive
+        - Bullish trend confirmation
+        
+        2. SELL Signals - When price crosses BELOW the ATR Trailing Stop
+        - Indicates potential downtrend start
+        - Price momentum negative
+        - Bearish trend confirmation
+        
+        ============================================================================
+        SIGNAL GENERATION PROCESS
+        ============================================================================
+        
+        Step 1: Calculate EMA for trend filter
+        Step 2: Detect EMA/Price crossover with ATR Trailing Stop
+        Step 3: Apply consecutive bar confirmation (reduces false signals)
+        Step 4: Calculate signal strength (1-5 scale)
+        Step 5: Apply min_strength threshold
+        Step 6: Add volume confirmation (optional)
+        Step 7: Calculate confidence scores (0-100)
+        
+        ============================================================================
+        SIGNAL STRENGTH SCORING (1-5)
+        ============================================================================
+        
+        Base Score: 1 (all signals start here)
+        Additional points:
+        +1 - Volume surge confirmation
+        +1 - Trend alignment (RSI > 50 for buys, RSI < 50 for sells)
+        +1 - RSI momentum (rising for buys, falling for sells)
+        +0-2 - Price distance from ATR stop (further = stronger)
+        
+        Result: 1=Weak, 2=Moderate, 3=Strong, 4=Very Strong, 5=Extremely Strong
+        
+        ============================================================================
+        CONFIDENCE SCORES (0-100)
+        ============================================================================
+        
+        Confidence = (Signal_Strength * 16) + Price_Contribution
+        Price_Contribution = 0-30 points based on distance from ATR stop
+        Crossover signals get an additional +20 points
+        
+        Interpret as:
+        0-30: Low confidence - Consider avoiding
+        31-70: Medium confidence - Good for regular positions
+        71-100: High confidence - Excellent for larger positions
+        
+        ============================================================================
+        PARAMETERS
+        ============================================================================
         
         Args:
-            df (pd.DataFrame): OHLCV DataFrame with columns: 'open', 'high', 'low', 'close', 'volume'
-                            Must also have 'ATRTrailingStop' column pre-calculated
-            ema_period (int): Period for Exponential Moving Average (default: 200)
-                            Used as trend filter - price above EMA = uptrend context
-            retry (bool): Whether to retry on dependency errors (default: True)
-            confirmation_bars (int): Number of consecutive bars required for signal confirmation (1-3)
-                                    Higher values reduce false signals but increase lag
-            volume_confirmation (bool): Whether to require volume surge confirmation (default: True)
-                                    Volume should be > 20-day average * 1.2 for buys,
-                                    > 20-day average * 1.15 for sells
+            df_src (pd.DataFrame): OHLCV DataFrame with columns:
+                - 'open', 'high', 'low', 'close', 'volume'
+                - Must also have 'ATRTrailingStop' column pre-calculated
+                - Data should be sorted newest first (descending index)
+                
+            ema_period (int): Period for Exponential Moving Average
+                - Default: 200 (long-term trend filter)
+                - Used to confirm overall trend direction
+                - Price above EMA = bullish context, below = bearish context
+                
+            retry (bool): Whether to retry on dependency errors
+                - Default: True
+                - When True, attempts to download missing template files
+                
+            confirmation_bars (int): Number of consecutive bars required
+                - Options: 1, 2, or 3
+                - 1: Quick signals, more noise (good for day trading)
+                - 2: Balanced signals (recommended for swing trading)
+                - 3: Conservative signals, less noise (for long-term)
+                
+            min_strength (int): Minimum signal strength required
+                - Options: 1-5
+                - 1: All signals (highest noise)
+                - 2: Moderate signals (recommended)
+                - 3: Strong signals only
+                - 4-5: Very strong signals only (rare)
+                
+            volume_confirmation (bool): Require volume surge confirmation
+                - Default: True
+                - Buys: Volume > 20-day average * 1.2
+                - Sells: Volume > 20-day average * 1.15
+                - False: Don't use volume filter
+                
+            stock_name (str): Stock symbol for debugging
+                - Default: "Unknown"
+                - Used in fallback logging
+        
+        ============================================================================
+        RETURNS
+        ============================================================================
         
         Returns:
-            pd.DataFrame: Original DataFrame with additional columns:
-                - Above (bool): EMA crossed above ATR Trailing Stop
-                - Below (bool): EMA crossed below ATR Trailing Stop
-                - Buy (bool): Qualified buy signal with confirmations
-                - Sell (bool): Qualified sell signal with confirmations
-                - Signal_Strength (int): 1=Weak, 2=Moderate, 3=Strong
-                - Buy_Confidence (int): 0-100 confidence score for buy signals
-                - Sell_Confidence (int): 0-100 confidence score for sell signals
-                - Price_To_Stop_Ratio (float): Distance from price to ATR stop as percentage
-                - Volume_Buy_Surge (bool): Volume confirmation for buys
-                - Volume_Sell_Surge (bool): Volume confirmation for sells
-                - Buy_Consecutive (bool): Consecutive bars above ATR stop
-                - Sell_Consecutive (bool): Consecutive bars below ATR stop
+            tuple: (df, debug_info)
+                df (pd.DataFrame): Original DataFrame with additional columns:
+                
+                    Signal Columns:
+                    - Buy (bool): True when qualified buy signal detected
+                    - Sell (bool): True when qualified sell signal detected
+                    - Above (bool): EMA crossed above ATR Trailing Stop
+                    - Below (bool): EMA crossed below ATR Trailing Stop
+                    
+                    Strength Columns:
+                    - Signal_Strength (int): 1-5 strength score
+                    - Buy_Confidence (int): 0-100 confidence for buy
+                    - Sell_Confidence (int): 0-100 confidence for sell
+                    
+                    Confirmation Columns:
+                    - Price_To_Stop_Ratio (float): Distance % from ATR stop
+                    Positive = above stop (bullish)
+                    Negative = below stop (bearish)
+                    
+                    - Volume_Buy_Surge (bool): Volume confirmation for buys
+                    - Volume_Sell_Surge (bool): Volume confirmation for sells
+                    - Buy_Consecutive (bool): Consecutive bars above stop
+                    - Sell_Consecutive (bool): Consecutive bars below stop
+                    
+                    Trend Columns:
+                    - Bullish_Trend (bool): RSI > 50 or price > SMA-20
+                    - Bearish_Trend (bool): RSI < 50 or price < SMA-20
+                    
+                debug_info (dict): Empty dict (reserved for debug version)
         
-        When to Use:
-        -----------
-        - Daily screening of 2000+ stocks
-        - When you need reliable signals with low false positives
-        - For swing trading (2-10 day holding period)
-        - When you want volume and trend confirmation
+        ============================================================================
+        USAGE EXAMPLES
+        ============================================================================
         
-        Example:
-        --------
-        >>> df = screener.computeBuySellSignals(df, confirmation_bars=2, volume_confirmation=True)
-        >>> buy_signals = df[df["Buy"] & (df["Buy_Confidence"] > 60)]
+        Example 1: Basic daily screening (fast, moderate quality)
+        >>> df, _ = screener.computeBuySellSignals(df, confirmation_bars=1, min_strength=2)
+        >>> buy_signals = df[df["Buy"]]
+        >>> sell_signals = df[df["Sell"]]
+        
+        Example 2: Conservative long-term screening (slow, high quality)
+        >>> df, _ = screener.computeBuySellSignals(df, confirmation_bars=2, min_strength=3, 
+        ...                                     volume_confirmation=True)
+        >>> high_confidence_buys = df[(df["Buy"]) & (df["Buy_Confidence"] > 70)]
+        
+        Example 3: Get signals by strength
+        >>> df, _ = screener.computeBuySellSignals(df)
+        >>> strong_buys = df[(df["Buy"]) & (df["Signal_Strength"] >= 4)]
+        >>> strong_sells = df[(df["Sell"]) & (df["Signal_Strength"] >= 4)]
+        
+        Example 4: Filter by confidence
+        >>> df, _ = screener.computeBuySellSignals(df)
+        >>> high_conf_buys = df[df["Buy_Confidence"] > 80]
+        >>> high_conf_sells = df[df["Sell_Confidence"] > 80]
+        
+        Example 5: Use with ATR Trailing Stop for position management
+        >>> df, _ = screener.computeBuySellSignals(df, confirmation_bars=2)
+        >>> 
+        >>> # Entry: First buy signal
+        >>> entry = df[df["Buy"]].iloc[0]
+        >>> 
+        >>> # Exit: First sell signal after entry
+        >>> exit = df[df.index > entry.name][df["Sell"]].iloc[0] if len(df[df["Sell"]]) > 0 else None
+        
+        Example 6: Backtesting strategy
+        >>> df, _ = screener.computeBuySellSignals(df, confirmation_bars=1)
+        >>> 
+        >>> # Long entries
+        >>> entries = df[df["Buy"]]
+        >>> 
+        >>> # Stop loss at ATR stop price
+        >>> stops = entries["ATRTrailingStop"]
+        >>> 
+        >>> # Take profit at 2x ATR from entry
+        >>> targets = entries["close"] + 2 * entries["xATR"]
+        
+        ============================================================================
+        TROUBLESHOOTING
+        ============================================================================
+        
+        No signals generated:
+        - Check if 'ATRTrailingStop' column exists
+        - Check if DataFrame has enough rows (min 20)
+        - Try lowering min_strength to 1
+        - Try setting confirmation_bars to 1
+        - Set volume_confirmation to False
+        
+        Too many false signals:
+        - Increase confirmation_bars to 2 or 3
+        - Increase min_strength to 3
+        - Enable volume_confirmation=True
+        
+        Missing sell signals:
+        - Check if price is actually crossing below ATR stop
+        - Verify DataFrame is sorted newest first
+        - Check fallback implementation (VectorBT may not be available)
+        
+        Slow performance:
+        - Reduce DataFrame size (keep last 100-200 bars)
+        - Use confirmation_bars=1 for faster screening
+        - Consider using the fallback implementation (no VectorBT)
+        
+        ============================================================================
+        NOTES
+        ============================================================================
+        
+        1. VectorBT is preferred but not required
+        2. Fallback implementation works in all cases but may be less accurate
+        3. ATRTrailingStop must be pre-calculated before calling this method
+        4. DataFrame should be sorted newest first (index descending)
+        5. For best results, use at least 100 bars of daily data
         """
+        # Create a copy to avoid modifying the original DataFrame
+        df = df_src.copy() if df_src is not None else None
+        
         try:
-            # Validate input DataFrame
+            # =====================================================================
+            # INPUT VALIDATION
+            # =====================================================================
             if df is None or len(df) == 0:
                 if self.default_logger:
                     self.default_logger.warning("computeBuySellSignals: Empty DataFrame provided")
@@ -244,11 +415,32 @@ class ScreeningStatistics:
             required_cols = ['close']
             missing_cols = [col for col in required_cols if col not in df.columns]
             if missing_cols:
+                if self.default_logger:
+                    self.default_logger.warning(f"Missing required columns: {missing_cols}")
                 return df, {}
             
             # Check if ATRTrailingStop column exists
             if 'ATRTrailingStop' not in df.columns:
+                if self.default_logger:
+                    self.default_logger.error("computeBuySellSignals: 'ATRTrailingStop' column not found")
                 return df, {}
+            
+            # Initialize all signal columns with default values
+            df["Above"] = False
+            df["Below"] = False
+            df["Buy"] = False
+            df["Sell"] = False
+            df["Signal_Strength"] = 0
+            df["Buy_Confidence"] = 0
+            df["Sell_Confidence"] = 0
+            df["Price_To_Stop_Ratio"] = 0.0
+            df["Buy_Consecutive"] = False
+            df["Sell_Consecutive"] = False
+            
+            if volume_confirmation:
+                df["Volume_Buy_Surge"] = False
+                df["Volume_Sell_Surge"] = False
+                df["Avg_Volume_20"] = 0.0
             
             # =====================================================================
             # VECTORBT-BASED SIGNAL COMPUTATION (Preferred)
@@ -258,15 +450,16 @@ class ScreeningStatistics:
                 if Imports["vectorbt"]:
                     from vectorbt.indicators import MA as vbt
                     vectorbt_available = True
+                    if self.default_logger:
+                        self.default_logger.debug("Using VectorBT for signal computation")
             except (ImportError, OSError, FileNotFoundError) as e:
                 # Handle missing vectorbt or template files
                 if self.default_logger:
                     self.default_logger.debug(f"VectorBT import failed: {e}")
                 
-                # Try to download missing template files (similar to downloadSaveTemplateJsons)
+                # Try to download missing template files
                 try:
                     import os
-                    # Determine the output folder for templates
                     outputFolder = None
                     if hasattr(e, 'filename') and e.filename:
                         try:
@@ -287,11 +480,19 @@ class ScreeningStatistics:
                         if Imports["vectorbt"]:
                             from vectorbt.indicators import MA as vbt
                             vectorbt_available = True
+                            if self.default_logger:
+                                self.default_logger.debug("VectorBT loaded after template download")
                 except Exception as ex:
                     if self.default_logger:
                         self.default_logger.debug(f"Error recovering from missing dependencies: {ex}", exc_info=True)
             
             if vectorbt_available:
+                if self.default_logger:
+                    self.default_logger.debug(f"Processing {len(df)} rows with VectorBT")
+                
+                # =================================================================
+                # VECTORBT IMPLEMENTATION
+                # =================================================================
                 if df is not None and len(df) > 0:
                     # Calculate EMA for trend filter
                     ema = vbt.run(df["close"], 1, short_name='EMA', ewm=True)
@@ -303,7 +504,6 @@ class ScreeningStatistics:
                     # Only proceed with confirmations if we have enough data
                     if len(df) >= confirmation_bars + 1:
                         # Calculate price distance from ATR stop (as percentage)
-                        # Positive = above stop (bullish), Negative = below stop (bearish)
                         atr_stop = df["ATRTrailingStop"]
                         df["Price_To_Stop_Ratio"] = (df["close"] - atr_stop) / atr_stop.replace(0, np.nan)
                         df["Price_To_Stop_Ratio"] = df["Price_To_Stop_Ratio"].fillna(0).clip(-0.5, 0.5)
@@ -314,14 +514,13 @@ class ScreeningStatistics:
                             df["Avg_Volume_20"] = df["volume"].rolling(window=20, min_periods=10).mean()
                             df["Avg_Volume_20"] = df["Avg_Volume_20"].fillna(df["volume"].mean())
                             
-                            # Volume surge for buys (accumulation - higher volume on up days)
+                            # Volume surge for buys (accumulation)
                             df["Volume_Buy_Surge"] = df["volume"] > df["Avg_Volume_20"] * 1.2
                             
-                            # Volume surge for sells (distribution - volume confirmation on down days)
+                            # Volume surge for sells (distribution)
                             df["Volume_Sell_Surge"] = df["volume"] > df["Avg_Volume_20"] * 1.15
                         
                         # ============ TREND STRENGTH INDICATORS ============
-                        # Calculate trend strength using RSI if available, otherwise use SMA
                         if 'RSI' in df.columns:
                             df["Bullish_Trend"] = df["RSI"] > 50
                             df["Bearish_Trend"] = df["RSI"] < 50
@@ -329,7 +528,7 @@ class ScreeningStatistics:
                             df["RSI_Momentum_Positive"] = df["RSI_Momentum"] > 0
                             df["RSI_Momentum_Negative"] = df["RSI_Momentum"] < 0
                         else:
-                            # Use SMA-20 as simple trend indicator
+                            # Use SMA-20 as fallback trend indicator
                             df["SMA_20"] = df["close"].rolling(window=20, min_periods=10).mean()
                             df["SMA_20"] = df["SMA_20"].fillna(method='bfill').fillna(df["close"])
                             df["Bullish_Trend"] = df["close"] > df["SMA_20"]
@@ -339,14 +538,19 @@ class ScreeningStatistics:
                         # ============ CONSECUTIVE BAR CONFIRMATION ============
                         # Buy confirmation: price staying above ATR stop for X consecutive bars
                         above_stop = df["close"] > df["ATRTrailingStop"]
-                        df["Buy_Consecutive"] = above_stop.rolling(window=confirmation_bars, min_periods=confirmation_bars).sum() >= confirmation_bars
+                        df["Buy_Consecutive"] = above_stop.rolling(
+                            window=confirmation_bars, 
+                            min_periods=confirmation_bars
+                        ).sum() >= confirmation_bars
                         
                         # Sell confirmation: price staying below ATR stop for X consecutive bars
                         below_stop = df["close"] < df["ATRTrailingStop"]
-                        df["Buy_Consecutive"] = above_stop.rolling(window=confirmation_bars, min_periods=confirmation_bars).sum() >= confirmation_bars
-                        df["Sell_Consecutive"] = below_stop.rolling(window=confirmation_bars, min_periods=confirmation_bars).sum() >= confirmation_bars
+                        df["Sell_Consecutive"] = below_stop.rolling(
+                            window=confirmation_bars, 
+                            min_periods=confirmation_bars
+                        ).sum() >= confirmation_bars
                         
-                        # ============ CALCULATE BUY SIGNAL STRENGTH (1-5 scale) ============
+                        # ============ CALCULATE BUY SIGNAL STRENGTH (1-5) ============
                         buy_condition = above_stop
                         if buy_condition.any():
                             # Base strength starts at 1
@@ -364,15 +568,14 @@ class ScreeningStatistics:
                             if 'RSI_Momentum_Positive' in df.columns:
                                 buy_strength += df["RSI_Momentum_Positive"].astype(int)
                             
-                            # Add points based on price distance from ATR stop
-                            # Clamp to 0-2 points
+                            # Add points based on price distance from ATR stop (0-2)
                             distance_points = np.clip(df["Price_To_Stop_Ratio"] * 20, 0, 2).astype(int)
                             buy_strength += distance_points
                             
                             # Cap at 5 and store
                             df.loc[buy_condition, "Signal_Strength"] = np.clip(buy_strength, 1, 5)
                         
-                        # ============ CALCULATE SELL SIGNAL STRENGTH (1-5 scale) ============
+                        # ============ CALCULATE SELL SIGNAL STRENGTH (1-5) ============
                         sell_condition = below_stop
                         if sell_condition.any():
                             # Base strength starts at 1
@@ -398,13 +601,14 @@ class ScreeningStatistics:
                             df.loc[sell_condition, "Signal_Strength"] = np.clip(sell_strength, 1, 5)
                         
                         # ============ FINAL SIGNALS WITH CONFIRMATION THRESHOLDS ============
-                        # Buy signals: price above stop AND strength >= 2 AND consecutive confirmation
-                        # min_strength = 2  # Require at least moderate strength
-                        df["Buy"] = (buy_condition & (df["Signal_Strength"] >= min_strength) & 
+                        # Buy signals: price above stop AND strength >= min_strength AND consecutive confirmation
+                        df["Buy"] = (buy_condition & 
+                                    (df["Signal_Strength"] >= min_strength) & 
                                     (df["Buy_Consecutive"] if confirmation_bars > 1 else True))
                         
-                        # Sell signals: price below stop AND strength >= 2 AND consecutive confirmation
-                        df["Sell"] = (sell_condition & (df["Signal_Strength"] >= min_strength) & 
+                        # Sell signals: price below stop AND strength >= min_strength AND consecutive confirmation
+                        df["Sell"] = (sell_condition & 
+                                    (df["Signal_Strength"] >= min_strength) & 
                                     (df["Sell_Consecutive"] if confirmation_bars > 1 else True))
                         
                         # Override with strong crossover signals (most reliable - always valid)
@@ -416,7 +620,8 @@ class ScreeningStatistics:
                         buy_mask = df["Buy"] == True
                         if buy_mask.any():
                             # Base confidence from signal strength (20-100)
-                            base_confidence = df.loc[buy_mask, "Signal_Strength"] * 16 # 2 strength = 32 confidence
+                            base_confidence = df.loc[buy_mask, "Signal_Strength"] * 16
+                            
                             # Add price distance contribution (0-30)
                             price_contribution = np.clip(df.loc[buy_mask, "Price_To_Stop_Ratio"] * 100, 0, 30)
                             
@@ -445,11 +650,20 @@ class ScreeningStatistics:
                         
                     else:
                         # Insufficient data for confirmations - use basic signals
+                        if self.default_logger:
+                            self.default_logger.debug(f"Insufficient data ({len(df)} rows) for confirmations, using basic signals")
+                        
                         df["Buy"] = (df["close"] > df["ATRTrailingStop"]) & (df["Above"] == True)
                         df["Sell"] = (df["close"] < df["ATRTrailingStop"]) & (df["Below"] == True)
                         df["Buy_Confidence"] = 50 if df["Buy"].any() else 0
                         df["Sell_Confidence"] = 50 if df["Sell"].any() else 0
-                        df["Signal_Strength"] = 2
+                        df["Signal_Strength"] = 2  # Moderate default
+                
+                    if self.default_logger:
+                        buy_count = df["Buy"].sum() if "Buy" in df.columns else 0
+                        sell_count = df["Sell"].sum() if "Sell" in df.columns else 0
+                        self.default_logger.debug(f"VectorBT results: {buy_count} buys, {sell_count} sells")
+            
             else:
                 # =====================================================================
                 # FALLBACK IMPLEMENTATION (Without VectorBT)
@@ -458,33 +672,141 @@ class ScreeningStatistics:
                     self.default_logger.warning("VectorBT not available. Using fallback calculation.")
                 
                 if df is not None and len(df) > 0:
-                    # Calculate EMA using pandas
-                    df["EMA"] = df["close"].ewm(span=ema_period, adjust=False, min_periods=1).mean() if ema_period > 1 else df["close"]
-                    df["Above"] = (df["EMA"] > df["ATRTrailingStop"]).shift(1) & (df["EMA"] <= df["ATRTrailingStop"])
-                    df["Below"] = (df["EMA"] < df["ATRTrailingStop"]).shift(1) & (df["EMA"] >= df["ATRTrailingStop"])
+                    # Calculate EMA using pandas (for trend filter)
+                    if ema_period > 1:
+                        df["EMA"] = df["close"].ewm(span=ema_period, adjust=False, min_periods=1).mean()
+                    else:
+                        df["EMA"] = df["close"]
+                    
+                    # ============ PROPER CROSSOVER DETECTION ============
+                    # Buy signal: price crosses ABOVE ATR stop (was below, now above)
+                    # This is the most reliable signal type
+                    df["Above"] = (df["close"] > df["ATRTrailingStop"]) & \
+                                (df["close"].shift(1) <= df["ATRTrailingStop"].shift(1))
+                    
+                    # Sell signal: price crosses BELOW ATR stop (was above, now below)
+                    df["Below"] = (df["close"] < df["ATRTrailingStop"]) & \
+                                (df["close"].shift(1) >= df["ATRTrailingStop"].shift(1))
+                    
+                    # Fill NaN values with False
                     df["Above"] = df["Above"].fillna(False)
                     df["Below"] = df["Below"].fillna(False)
                     
+                    # ============ VOLUME CONFIRMATION (if available) ============
+                    if volume_confirmation and 'volume' in df.columns and len(df) >= 20:
+                        df["Avg_Volume_20"] = df["volume"].rolling(window=20, min_periods=10).mean()
+                        df["Avg_Volume_20"] = df["Avg_Volume_20"].fillna(df["volume"].mean())
+                        df["Volume_Buy_Surge"] = df["volume"] > df["Avg_Volume_20"] * 1.2
+                        df["Volume_Sell_Surge"] = df["volume"] > df["Avg_Volume_20"] * 1.15
+                    else:
+                        # Create dummy columns if volume not available
+                        df["Volume_Buy_Surge"] = True
+                        df["Volume_Sell_Surge"] = True
+                        df["Avg_Volume_20"] = 0
+                    
+                    # ============ PRICE MOMENTUM for signal quality ============
                     if len(df) >= 2:
                         df["Price_Momentum"] = df["close"] > df["close"].shift(1)
-                        df["Buy"] = (df["close"] > df["ATRTrailingStop"]) & (df["Above"] == True) & (df["Price_Momentum"] == True)
-                        df["Sell"] = (df["close"] < df["ATRTrailingStop"]) & (df["Below"] == True) & (df["Price_Momentum"] == False)
-                        df["Buy_Confidence"] = 60 if df["Buy"].any() else 0
-                        df["Sell_Confidence"] = 60 if df["Sell"].any() else 0
+                        df["Price_Momentum"] = df["Price_Momentum"].fillna(False)
                     else:
-                        df["Buy"] = (df["close"] > df["ATRTrailingStop"]) & (df["Above"] == True)
-                        df["Sell"] = (df["close"] < df["ATRTrailingStop"]) & (df["Below"] == True)
-                        df["Buy_Confidence"] = 50 if df["Buy"].any() else 0
-                        df["Sell_Confidence"] = 50 if df["Sell"].any() else 0
+                        df["Price_Momentum"] = True
                     
-                    df["Signal_Strength"] = 2
-                
+                    # ============ GENERATE BUY SIGNALS ============
+                    # Buy conditions:
+                    # 1. Price is above ATR stop (trend strength)
+                    price_above_stop = df["close"] > df["ATRTrailingStop"]
+                    
+                    # 2. Crossover detected OR price consistently above stop
+                    buy_condition = df["Above"] | (price_above_stop & df["Above"].shift(1).fillna(False))
+                    
+                    # 3. Optional volume confirmation
+                    if volume_confirmation and 'Volume_Buy_Surge' in df.columns:
+                        buy_condition = buy_condition & df["Volume_Buy_Surge"]
+                    
+                    # 4. Price momentum (must be positive for buys)
+                    buy_condition = buy_condition & (df["Price_Momentum"] == True)
+                    
+                    # Apply min_strength threshold for buys (in fallback, strength is binary)
+                    if min_strength <= 2:
+                        df["Buy"] = buy_condition
+                    else:
+                        # Require additional confirmation for higher strength
+                        df["Buy"] = buy_condition & (df["Above"] == True)
+                    
+                    # ============ GENERATE SELL SIGNALS ============
+                    # Sell conditions:
+                    # 1. Price is below ATR stop (trend weakness)
+                    price_below_stop = df["close"] < df["ATRTrailingStop"]
+                    
+                    # 2. Crossover detected OR price consistently below stop
+                    sell_condition = df["Below"] | (price_below_stop & df["Below"].shift(1).fillna(False))
+                    
+                    # 3. Optional volume confirmation
+                    if volume_confirmation and 'Volume_Sell_Surge' in df.columns:
+                        sell_condition = sell_condition & df["Volume_Sell_Surge"]
+                    
+                    # 4. Price momentum (must be negative for sells)
+                    sell_condition = sell_condition & (df["Price_Momentum"] == False)
+                    
+                    # Apply min_strength threshold for sells
+                    if min_strength <= 2:
+                        df["Sell"] = sell_condition
+                    else:
+                        df["Sell"] = sell_condition & (df["Below"] == True)
+                    
+                    # ============ SET CONFIDENCE AND STRENGTH ============
+                    # For fallback, use simplified confidence based on signal type
+                    df["Signal_Strength"] = 2  # Default moderate strength
+                    df["Buy_Confidence"] = 0
+                    df["Sell_Confidence"] = 0
+                    
+                    # Calculate confidence for buys
+                    if df["Buy"].any():
+                        # Base confidence 60, add volume surge points if available
+                        if volume_confirmation and 'Volume_Buy_Surge' in df.columns:
+                            df.loc[df["Buy"], "Buy_Confidence"] = 60 + (df.loc[df["Buy"], "Volume_Buy_Surge"].astype(int) * 10)
+                        else:
+                            df.loc[df["Buy"], "Buy_Confidence"] = 60
+                        
+                        # Boost confidence for crossover signals
+                        df.loc[df["Buy"] & (df["Above"] == True), "Buy_Confidence"] += 20
+                        
+                        # Cap at 100
+                        df["Buy_Confidence"] = np.clip(df["Buy_Confidence"], 0, 100)
+                    
+                    # Calculate confidence for sells
+                    if df["Sell"].any():
+                        # Base confidence 60, add volume surge points if available
+                        if volume_confirmation and 'Volume_Sell_Surge' in df.columns:
+                            df.loc[df["Sell"], "Sell_Confidence"] = 60 + (df.loc[df["Sell"], "Volume_Sell_Surge"].astype(int) * 10)
+                        else:
+                            df.loc[df["Sell"], "Sell_Confidence"] = 60
+                        
+                        # Boost confidence for crossover signals
+                        df.loc[df["Sell"] & (df["Below"] == True), "Sell_Confidence"] += 20
+                        
+                        # Cap at 100
+                        df["Sell_Confidence"] = np.clip(df["Sell_Confidence"], 0, 100)
+                    
+                    # Enhance signal strength based on crossing type
+                    if df["Buy"].any():
+                        df.loc[df["Buy"] & (df["Above"] == True), "Signal_Strength"] = 3
+                    if df["Sell"].any():
+                        df.loc[df["Sell"] & (df["Below"] == True), "Signal_Strength"] = 3
+                    
+                    if self.default_logger:
+                        buy_count = df["Buy"].sum() if "Buy" in df.columns else 0
+                        sell_count = df["Sell"].sum() if "Sell" in df.columns else 0
+                        self.default_logger.debug(f"Fallback results: {buy_count} buys, {sell_count} sells for {stock_name}")
+            
         except KeyboardInterrupt:
             # Re-raise keyboard interrupt for proper handling
             raise KeyboardInterrupt
+            
         except Exception as e:
             if self.default_logger:
                 self.default_logger.error(f"computeBuySellSignals error: {e}", exc_info=True)
+            
             # Ensure all expected columns exist even on error
             expected_cols = ['Buy', 'Sell', 'Buy_Confidence', 'Sell_Confidence', 'Signal_Strength',
                             'Above', 'Below', 'Price_To_Stop_Ratio']
@@ -492,16 +814,21 @@ class ScreeningStatistics:
                 if col not in df.columns:
                     df[col] = False if col in ['Buy', 'Sell', 'Above', 'Below'] else 0
         
-        # Final cleanup: ensure no NaN values in signal columns
+        # =========================================================================
+        # FINAL CLEANUP AND VALIDATION
+        # =========================================================================
         if df is not None:
+            # Ensure no NaN values in boolean signal columns
             for col in ['Buy', 'Sell', 'Above', 'Below']:
                 if col in df.columns:
                     df[col] = df[col].fillna(False)
             
+            # Ensure no NaN values in numeric columns
             for col in ['Buy_Confidence', 'Sell_Confidence', 'Signal_Strength']:
                 if col in df.columns:
                     df[col] = df[col].fillna(0)
         
+        # Return tuple with empty debug info
         return df, {}
 
     # =============================================================================
@@ -1639,7 +1966,7 @@ class ScreeningStatistics:
         #     self.default_logger.debug(data.head(10))
         return atrCrossCondition
     
-    def findATRTrailingStops(self, df, sensitivity=1, atr_period=10, ema_period=1,
+    def findATRTrailingStops(self, df_src, sensitivity=1, atr_period=10, ema_period=1,
                             buySellAll=1, saveDict=None, screenDict=None,
                             use_scoring=False, 
                             min_confidence=50, 
@@ -1651,7 +1978,7 @@ class ScreeningStatistics:
                             min_strength_for_confirmation=2,
                             stock_name="Unknown"):
         """
-        Debug version of findATRTrailingStops that logs detailed information at every stage.
+        Find ATR Trailing Stop signals using progressive validation.
         
         This function provides comprehensive diagnostics to identify why signals are
         being rejected or accepted. It logs:
@@ -1662,7 +1989,7 @@ class ScreeningStatistics:
         - Threshold comparisons
         
         Args:
-            df: OHLCV DataFrame
+            df_src: OHLCV DataFrame
             sensitivity: ATR multiplier
             atr_period: Period for ATR calculation
             ema_period: Period for EMA trend filter
@@ -1679,12 +2006,13 @@ class ScreeningStatistics:
         # =========================================================================
         # LEVEL 1: QUICK VALIDATION - FAIL FAST FOR 2000+ STOCKS
         # =========================================================================
-        if df is None:
+        if df_src is None:
             return False, {}
         
-        if len(df) == 0:
+        if len(df_src) == 0:
             return False, {}
         
+        df = df_src.copy()
         # Quick price check
         try:
             recent_close = df['close'].iloc[0] if not df.empty else 0
@@ -1756,26 +2084,26 @@ class ScreeningStatistics:
         # Reverse back to newest first for signal detection
         data = data[::-1]
         
-        # =========================================================================
-        # LEVEL 3: DIRECT PRICE VS STOP ANALYSIS (Pre-signal check)
-        # =========================================================================
-        if len(data) >= 2:
-            current_close = data["close"].iloc[0]
-            current_stop = data["ATRTrailingStop"].iloc[0]
-            prev_close = data["close"].iloc[1] if len(data) > 1 else current_close
-            prev_stop = data["ATRTrailingStop"].iloc[1] if len(data) > 1 else current_stop
+        # # =========================================================================
+        # # LEVEL 3: DIRECT PRICE VS STOP ANALYSIS (Pre-signal check)
+        # # =========================================================================
+        # if len(data) >= 2:
+        #     current_close = data["close"].iloc[0]
+        #     current_stop = data["ATRTrailingStop"].iloc[0]
+        #     prev_close = data["close"].iloc[1] if len(data) > 1 else current_close
+        #     prev_stop = data["ATRTrailingStop"].iloc[1] if len(data) > 1 else current_stop
             
-            price_above_stop = current_close > current_stop
-            price_below_stop = current_close < current_stop
-            above_cross = (prev_close <= prev_stop) and (current_close > current_stop)
-            below_cross = (prev_close >= prev_stop) and (current_close < current_stop)
-            if buySellAll == 1 and not (price_above_stop or above_cross):
-                return False, {}
-            elif buySellAll == 2 and not (price_below_stop or below_cross):
-                return False, {}
+        #     price_above_stop = current_close > current_stop
+        #     price_below_stop = current_close < current_stop
+        #     above_cross = (prev_close <= prev_stop) and (current_close > current_stop)
+        #     below_cross = (prev_close >= prev_stop) and (current_close < current_stop)
+        #     if buySellAll == 1 and not (price_above_stop or above_cross):
+        #         return False, {}
+        #     elif buySellAll == 2 and not (price_below_stop or below_cross):
+        #         return False, {}
         
         # =========================================================================
-        # LEVEL 4: SIGNAL DETECTION USING computeBuySellSignals
+        # LEVEL 3: SIGNAL DETECTION USING computeBuySellSignals
         # =========================================================================
         try:
             data_with_signals, _ = self.computeBuySellSignals(
@@ -1808,7 +2136,7 @@ class ScreeningStatistics:
         sell_confidence = recent["Sell_Confidence"].iloc[0] if "Sell_Confidence" in recent.columns else 0
         
         # =========================================================================
-        # LEVEL 5: USE SCORING FOR CANDIDATE STOCKS (Optional)
+        # LEVEL 4: USE SCORING FOR CANDIDATE STOCKS (Optional)
         # =========================================================================
         if use_scoring and (buy_signal or sell_signal):
             try:
@@ -1821,7 +2149,6 @@ class ScreeningStatistics:
                     recent_scored = scored_data.tail(1)
                     if "Signal_Score" in recent_scored.columns:
                         signal_score = recent_scored["Signal_Score"].iloc[0]
-                        # confidence = recent_scored["Confidence"].iloc[0] if "Confidence" in recent_scored.columns else "LOW"
                         
                         if buy_signal and signal_score < min_confidence:
                             buy_signal = False
@@ -1837,7 +2164,7 @@ class ScreeningStatistics:
                     self.default_logger.debug(f"Scoring error: {e}")
         
         # =========================================================================
-        # LEVEL 6: APPLY BALANCED FILTERS (Optional)
+        # LEVEL 5: APPLY BALANCED FILTERS (Optional)
         # =========================================================================
         # Only apply balanced filter if we're looking for specific signals
         if buySellAll != 3 and (buy_signal or sell_signal):
@@ -1868,7 +2195,7 @@ class ScreeningStatistics:
                     self.default_logger.debug(f"Balanced filter error: {e}")
         
         # =========================================================================
-        # LEVEL 7: APPLY CONFIDENCE THRESHOLDS
+        # LEVEL 6: APPLY CONFIDENCE THRESHOLDS
         # =========================================================================
         if buy_signal and buy_confidence < min_confidence:
             buy_signal = False
@@ -1877,7 +2204,7 @@ class ScreeningStatistics:
             sell_signal = False
         
         # =========================================================================
-        # LEVEL 8: DETERMINE RETURN VALUE
+        # LEVEL 7: DETERMINE RETURN VALUE
         # =========================================================================
         result = False
         signal_type = "NA"
@@ -1896,7 +2223,7 @@ class ScreeningStatistics:
                 signal_type = "Sell"
         
         # =========================================================================
-        # LEVEL 9: STORE RESULTS (if dictionaries provided)
+        # LEVEL 8: STORE RESULTS (if dictionaries provided)
         # =========================================================================
         if saveDict is not None and screenDict is not None:
             saveDict["B/S"] = signal_type
@@ -1911,6 +2238,7 @@ class ScreeningStatistics:
             else:
                 screenDict["B/S"] = colorText.WARN + "NA" + colorText.END
         
+        self.default_logger.debug(f"DEBUG: Returning result={result}, signal_type={signal_type}, buy_signal={buy_signal}, sell_signal={sell_signal}")
         return result, {}
 
     def findATRTrailingStopsBatch(self, stocks_df_dict, sensitivity=1, atr_period=10, 

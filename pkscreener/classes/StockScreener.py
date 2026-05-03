@@ -69,8 +69,8 @@ class StockScreener:
                 selective_debug=False
             )
         # Now log something to verify
-        if hostRef and hostRef.default_logger:
-            hostRef.default_logger.debug(f"Child process started for stock: {stock}")
+        # if hostRef and hostRef.default_logger:
+        #     hostRef.default_logger.debug(f"Child process started for stock: {stock}")
 
     # @tracelog
     def screenStocks(
