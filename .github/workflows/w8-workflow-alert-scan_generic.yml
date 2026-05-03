@@ -824,7 +824,7 @@ jobs:
       if: (steps.download-exe-ubuntu.outcome == 'success' || steps.download-exe-windows.outcome == 'success')
       uses: actions/cache/save@v4
       with:
-        path: ${{ steps.exe-names.outputs.compressed_name }}
+        path: /home/runner/work/PKScreener/PKScreener/${{ steps.exe-names.outputs.compressed_name }}
         key: exe-${{ runner.os }}-${{ steps.releaseurlsetter.outputs.VERSION }}
 
     - name: Log executable cache save status
@@ -832,7 +832,7 @@ jobs:
       shell: bash
       run: |
         echo "=== Executable Cache Save Status ==="
-        if [ -f "${{ steps.exe-names.outputs.compressed_name }}" ]; then
+        if [ -f cd /home/runner/work/PKScreener/PKScreener/${{ steps.exe-names.outputs.compressed_name }}" ]; then
           FILE_SIZE=$(stat -c%s "${{ steps.exe-names.outputs.compressed_name }}" 2>/dev/null || stat -f%z "${{ steps.exe-names.outputs.compressed_name }}" 2>/dev/null)
           echo "💾 Saved compressed executable to cache: $FILE_SIZE bytes"
         else
@@ -842,14 +842,6 @@ jobs:
     # ============================================================================
     # SAVE STOCK DATA CACHE (AFTER SCAN - Non-market hours only)
     # ============================================================================
-    - name: Save Stock Data Cache (after scan)
-      if: steps.market-hours-check.outputs.should_save_cache == 'true'
-      uses: actions/cache/save@v4
-      with:
-        path: |
-          results/Data/
-        key: stock-data-${{ runner.os }}-${{ github.run_id }}-${{ github.run_number }}
-
     - name: Save Stock Data Cache (after scan)
       if: steps.market-hours-check.outputs.should_save_cache == 'true'
       uses: actions/cache/save@v4
