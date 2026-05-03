@@ -3272,7 +3272,7 @@ def printNotifySaveScreenedResults(screenResults, saveResults, selectedChoice, m
                                 )
                                 os.remove(pngName + backtestExtension)
                         except Exception as e:  # pragma: no cover
-                            default_logger().debug(e, exc_info=True)
+                            default_logger().debug(f"globals.printNotifySaveScreenedResults: {e}", exc_info=True)
                             pass
                     else:
                         tabulateBacktestResults(saveResults)
@@ -3539,7 +3539,7 @@ def sendQuickScanResult(menuChoiceHierarchy, user, tabulated_results, markdown_r
             )
             os.remove(pngName + pngExtension)
     except Exception as e:  # pragma: no cover
-        default_logger().debug(e, exc_info=True)
+        default_logger().debug(f"globals.sendQuickScanResult: {e}", exc_info=True)
         pass
 
 def reformatTable(summaryText, headerDict, colored_text, sorting=True):

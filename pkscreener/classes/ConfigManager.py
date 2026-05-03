@@ -57,7 +57,7 @@ class tools(SingletonMixin, metaclass=SingletonType):
         self.otpInterval = 120
         self.telegramImageFormat = "JPEG"
         self.telegramImageCompressionRatio = 0.6
-        self.telegramImageQualityPercentage = 20
+        self.telegramImageQualityPercentage = 10
 
         self.barometerx = 240
         self.barometery = 305
@@ -84,7 +84,7 @@ class tools(SingletonMixin, metaclass=SingletonType):
         self.defaultIndex = 12
         self.longTimeout = 4
         self.maxNetworkRetryCount = 10
-        self.maxdisplayresults = 100
+        self.maxdisplayresults = 50
         self.baseIndex = "^NSEI"
         self.backtestPeriod = 120
         self.marketOpen = "09:15"

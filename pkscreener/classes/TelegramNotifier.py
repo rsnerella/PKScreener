@@ -117,7 +117,7 @@ class TelegramNotifier:
                 )
                 os.remove(png_name + png_extension)
         except Exception as e:
-            default_logger().debug(e, exc_info=True)
+            default_logger().debug(f"TelegramNotifier.send_quick_scan_result: {e}", exc_info=True)
             
     def send_message_to_telegram(self, message=None, photo_file_path=None,
                                   document_file_path=None, caption=None, user=None,

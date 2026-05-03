@@ -385,6 +385,8 @@ class PKImageTools:
         if "PKDevTools_Default_Log_Level" not in os.environ.keys():
             if "RUNNER" in os.environ.keys() and os.environ["RUNNER"] == "LOCAL_RUN_SCANNER":
                 return
+        else:
+            default_logger().debug("PKImageTools.tableToImage: Starting image generation...")
                 
         warnings.filterwarnings("ignore", category=DeprecationWarning)
         ART_FONT_SIZE = 30
@@ -437,7 +439,7 @@ class PKImageTools:
         except KeyboardInterrupt:
             raise KeyboardInterrupt
         except Exception as e:
-            default_logger().debug(e, exc_info=True)
+            default_logger().debug(f"PKImageTools.tableToImage: {e}", exc_info=True)
     
     @staticmethod
     def _calculateImageDimensions(table, styledTable, label, backtestSummary, 

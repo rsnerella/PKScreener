@@ -1600,7 +1600,7 @@ class TelegramNotifier:
                 )
                 os.remove(png_name + png_extension)
         except Exception as e:
-            default_logger().debug(e, exc_info=True)
+            default_logger().debug(f"MenuManager.TelegramNotifier.send_quick_scan_result: {e}", exc_info=True)
             pass
 
 
