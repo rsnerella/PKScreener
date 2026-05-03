@@ -115,6 +115,18 @@ jobs:
         fi
 
     # ============================================================================
+    # GET LATEST RELEASE VERSION
+    # ============================================================================
+    # Note: The above step depends on releaseurlsetter output.
+    # We need to restructure - let's run githubutilities first
+    - name: Environment setup to get latest EXE
+      shell: bash
+      id: releaseurlsetter
+      run: |
+        pip install requests
+        python3 .github/workflows/githubutilities.py -d
+
+    # ============================================================================
     # CHECK MARKET HOURS (IST: Monday-Friday 9:15 AM to 3:30 PM)
     # ============================================================================
     - name: Check if currently in market hours
@@ -185,6 +197,214 @@ jobs:
           echo "📊 Restored: $PKL_COUNT .pkl files, $JSON_COUNT .json files"
         else
           echo "No cached data restored - will download fresh"
+        fi
+
+    # ============================================================================
+    # EXECUTABLE CACHING (Version-based, compressed)
+    # ============================================================================
+    - name: Cache PKScreener Executable (compressed)
+      id: exe-cache
+      uses: actions/cache@v4
+      with:
+        path: |
+          pkscreenercli_x64.bin.gz
+          pkscreenercli.exe.gz
+        key: exe-${{ runner.os }}-${{ steps.releaseurlsetter.outputs.VERSION }}
+        restore-keys: |
+          exe-${{ runner.os }}-${{ steps.releaseurlsetter.outputs.VERSION }}
+
+    # ============================================================================
+    # DOWNLOAD & COMPRESS EXECUTABLE (if not cached or cache miss)
+    # ============================================================================
+    - name: Download and compress executable on Ubuntu
+      id: download-exe-ubuntu
+      if: (steps.exe-cache.outputs.cache-hit != 'true') && startsWith(runner.os, 'Linux') && steps.check-tensorflow.outputs.requires_tensorflow != 'true'
+      shell: bash
+      env:
+        exe_path: ${{ steps.releaseurlsetter.outputs.DOWNLOAD_URL }}
+      run: |
+        BINARY_NAME="pkscreenercli_x64.bin"
+        COMPRESSED_NAME="${BINARY_NAME}.gz"
+        
+        echo "📦 Downloading executable from: $exe_path"
+        curl -o "$BINARY_NAME" -JL "$exe_path"
+        
+        # Verify download was successful
+        if [ ! -f "$BINARY_NAME" ]; then
+          echo "ERROR: Failed to download executable"
+          exit 1
+        fi
+        
+        # Check file size (should be > 100MB)
+        FILE_SIZE=$(stat -c%s "$BINARY_NAME")
+        if [ $FILE_SIZE -lt 100000000 ]; then
+          echo "ERROR: Downloaded file is too small ($FILE_SIZE bytes). Possible corrupted download."
+          exit 1
+        fi
+        
+        echo "✅ Downloaded executable size: $FILE_SIZE bytes"
+        chmod +x "$BINARY_NAME"
+        
+        # Compress to save storage (700+ MB -> ~200 MB)
+        echo "🗜️ Compressing executable..."
+        gzip -c "$BINARY_NAME" > "$COMPRESSED_NAME"
+        
+        ORIGINAL_SIZE=$(stat -c%s "$BINARY_NAME")
+        COMPRESSED_SIZE=$(stat -c%s "$COMPRESSED_NAME")
+        RATIO=$(echo "scale=1; (1 - $COMPRESSED_SIZE/$ORIGINAL_SIZE) * 100" | bc)
+        echo "✅ Compression complete: $ORIGINAL_SIZE -> $COMPRESSED_SIZE bytes (${RATIO}% saved)"
+        
+        # Keep both original and compressed
+        echo "compressed_path=$COMPRESSED_NAME" >> $GITHUB_OUTPUT
+        echo "original_path=$BINARY_NAME" >> $GITHUB_OUTPUT
+
+    - name: Download and compress executable on Windows
+      id: download-exe-windows
+      if: (steps.exe-cache.outputs.cache-hit != 'true') && startsWith(runner.os, 'Windows') && steps.check-tensorflow.outputs.requires_tensorflow != 'true'
+      shell: bash
+      env:
+        exe_path: ${{ steps.releaseurlsetter.outputs.DOWNLOAD_URL }}
+      run: |
+        BINARY_NAME="pkscreenercli.exe"
+        COMPRESSED_NAME="${BINARY_NAME}.gz"
+        
+        echo "📦 Downloading executable from: $exe_path"
+        curl -o "$BINARY_NAME" -JL "$exe_path"
+        
+        # Verify download was successful
+        if [ ! -f "$BINARY_NAME" ]; then
+          echo "ERROR: Failed to download executable"
+          exit 1
+        fi
+        
+        # Check file size
+        FILE_SIZE=$(stat -c%s "$BINARY_NAME")
+        if [ $FILE_SIZE -lt 100000000 ]; then
+          echo "ERROR: Downloaded file is too small ($FILE_SIZE bytes). Possible corrupted download."
+          exit 1
+        fi
+        
+        echo "✅ Downloaded executable size: $FILE_SIZE bytes"
+        
+        # Compress to save storage
+        echo "🗜️ Compressing executable..."
+        gzip -c "$BINARY_NAME" > "$COMPRESSED_NAME"
+        
+        ORIGINAL_SIZE=$(stat -c%s "$BINARY_NAME")
+        COMPRESSED_SIZE=$(stat -c%s "$COMPRESSED_NAME")
+        RATIO=$(echo "scale=1; (1 - $COMPRESSED_SIZE/$ORIGINAL_SIZE) * 100" | bc)
+        echo "✅ Compression complete: $ORIGINAL_SIZE -> $COMPRESSED_SIZE bytes (${RATIO}% saved)"
+        
+        echo "compressed_path=$COMPRESSED_NAME" >> $GITHUB_OUTPUT
+        echo "original_path=$BINARY_NAME" >> $GITHUB_OUTPUT
+
+    # ============================================================================
+    # RESTORE EXECUTABLE FROM CACHE (if cache hit)
+    # ============================================================================
+    - name: Restore executable from cache (Ubuntu)
+      if: (steps.exe-cache.outputs.cache-hit == 'true') && startsWith(runner.os, 'Linux') && steps.check-tensorflow.outputs.requires_tensorflow != 'true'
+      shell: bash
+      run: |
+        COMPRESSED_NAME="pkscreenercli_x64.bin.gz"
+        BINARY_NAME="pkscreenercli_x64.bin"
+        
+        echo "📦 Restoring executable from cache..."
+        
+        # Decompress
+        gunzip -c "$COMPRESSED_NAME" > "$BINARY_NAME"
+        chmod +x "$BINARY_NAME"
+        
+        # Verify decompressed file
+        if [ ! -f "$BINARY_NAME" ]; then
+          echo "ERROR: Failed to decompress executable"
+          exit 1
+        fi
+        
+        FILE_SIZE=$(stat -c%s "$BINARY_NAME")
+        echo "✅ Restored executable size: $FILE_SIZE bytes"
+        
+        # Store path for later steps
+        echo "original_path=$BINARY_NAME" >> $GITHUB_OUTPUT
+
+    - name: Restore executable from cache (Windows)
+      if: (steps.exe-cache.outputs.cache-hit == 'true') && startsWith(runner.os, 'Windows') && steps.check-tensorflow.outputs.requires_tensorflow != 'true'
+      shell: bash
+      run: |
+        COMPRESSED_NAME="pkscreenercli.exe.gz"
+        BINARY_NAME="pkscreenercli.exe"
+        
+        echo "📦 Restoring executable from cache..."
+        
+        # Decompress
+        gunzip -c "$COMPRESSED_NAME" > "$BINARY_NAME"
+        
+        # Verify decompressed file
+        if [ ! -f "$BINARY_NAME" ]; then
+          echo "ERROR: Failed to decompress executable"
+          exit 1
+        fi
+        
+        FILE_SIZE=$(stat -c%s "$BINARY_NAME")
+        echo "✅ Restored executable size: $FILE_SIZE bytes"
+        
+        echo "original_path=$BINARY_NAME" >> $GITHUB_OUTPUT
+
+    # ============================================================================
+    # VALIDATE EXECUTABLE INTEGRITY
+    # ============================================================================
+    - name: Validate executable integrity
+      id: validate-exe
+      if: steps.check-tensorflow.outputs.requires_tensorflow != 'true'
+      shell: bash
+      run: |
+        if [ "${{ runner.os }}" == "Linux" ]; then
+          BINARY_NAME="pkscreenercli_x64.bin"
+        else
+          BINARY_NAME="pkscreenercli.exe"
+        fi
+        
+        echo "🔍 Validating executable: $BINARY_NAME"
+        
+        if [ ! -f "$BINARY_NAME" ]; then
+          echo "ERROR: Executable not found at $BINARY_NAME"
+          echo "valid=false" >> $GITHUB_OUTPUT
+          exit 1
+        fi
+        
+        # Check if it's a valid ELF binary (Linux)
+        if [ "${{ runner.os }}" == "Linux" ]; then
+          if file "$BINARY_NAME" | grep -q "ELF 64-bit"; then
+            echo "✅ Valid ELF 64-bit binary detected"
+            echo "valid=true" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Invalid or corrupted binary - not an ELF file"
+            file "$BINARY_NAME"
+            echo "valid=false" >> $GITHUB_OUTPUT
+            # Force cache to be invalidated for next run
+            echo "corrupted=true" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+        else
+          # Windows - check if it's a valid PE executable
+          if file "$BINARY_NAME" | grep -q "PE32\|PE32+"; then
+            echo "✅ Valid Windows PE executable detected"
+            echo "valid=true" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Invalid or corrupted Windows executable"
+            file "$BINARY_NAME"
+            echo "valid=false" >> $GITHUB_OUTPUT
+            echo "corrupted=true" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+        fi
+        
+        # Test run with --help to ensure it works
+        echo "🧪 Testing executable with --help..."
+        if "$BINARY_NAME" --help > /dev/null 2>&1; then
+          echo "✅ Executable runs successfully"
+        else
+          echo "⚠️ Executable may be corrupted - run with --help failed"
+          echo "corrupted=true" >> $GITHUB_OUTPUT
         fi
 
     # ============================================================================
@@ -316,13 +536,6 @@ jobs:
         echo "✅ Virtual environment created and will be cached for future runs"
         # The cache action will automatically save after this step
 
-    - name: Environment setup to get latest EXE
-      shell: bash
-      id: releaseurlsetter
-      run: |
-        pip install requests
-        python3 .github/workflows/githubutilities.py -d
-
     # Phase 1: Binary caching to reduce scan latency by 30-60s
     # - name: Cache PKScreener Binary (Linux)
     #   if: startsWith(runner.os, 'Linux')
@@ -344,22 +557,22 @@ jobs:
     #     restore-keys: |
     #       ${{ runner.os }}-pkscreener-bin-
 
-    - name: Download latest executable on Windows
-      shell: cmd
-      if: startsWith(runner.os, 'Windows') && steps.check-tensorflow.outputs.requires_tensorflow != 'true'
-      env:
-        exe_path: ${{ steps.releaseurlsetter.outputs.DOWNLOAD_URL }}
-      run: |
-        curl -o pkscreenercli.exe -JL %exe_path%
+    # - name: Download latest executable on Windows
+    #   shell: cmd
+    #   if: startsWith(runner.os, 'Windows') && steps.check-tensorflow.outputs.requires_tensorflow != 'true'
+    #   env:
+    #     exe_path: ${{ steps.releaseurlsetter.outputs.DOWNLOAD_URL }}
+    #   run: |
+    #     curl -o pkscreenercli.exe -JL %exe_path%
 
-    - name: Download latest executable on Ubuntu
-      shell: bash
-      if: startsWith(runner.os, 'Linux') && steps.check-tensorflow.outputs.requires_tensorflow != 'true'
-      env:
-        exe_path: ${{ steps.releaseurlsetter.outputs.DOWNLOAD_URL }}
-      run: |
-        curl -o /home/runner/work/PKScreener/PKScreener/pkscreenercli_x64.bin -JL $exe_path
-        chmod +x /home/runner/work/PKScreener/PKScreener/pkscreenercli_x64.bin
+    # - name: Download latest executable on Ubuntu
+    #   shell: bash
+    #   if: startsWith(runner.os, 'Linux') && steps.check-tensorflow.outputs.requires_tensorflow != 'true'
+    #   env:
+    #     exe_path: ${{ steps.releaseurlsetter.outputs.DOWNLOAD_URL }}
+    #   run: |
+    #     curl -o /home/runner/work/PKScreener/PKScreener/pkscreenercli_x64.bin -JL $exe_path
+    #     chmod +x /home/runner/work/PKScreener/PKScreener/pkscreenercli_x64.bin
 
     # - name: Validate and ensure binary is executable
     #   shell: bash
@@ -541,6 +754,22 @@ jobs:
         cd /home/runner/work/PKScreener/PKScreener/
         python3 pkscreener/pkscreenercli.py ${{ inputs.params }}
         ${{ inputs.postrun }}
+
+    # ============================================================================
+    # HANDLE EXECUTABLE CORRUPTION - Force re-download on next run
+    # ============================================================================
+    - name: Mark cache as invalid on corruption
+      if: steps.validate-exe.outputs.corrupted == 'true'
+      shell: bash
+      run: |
+        echo "⚠️ Executable corruption detected - will force re-download on next run"
+        # Delete the corrupted binary
+        if [ "${{ runner.os }}" == "Linux" ]; then
+          rm -f pkscreenercli_x64.bin pkscreenercli_x64.bin.gz
+        else
+          rm -f pkscreenercli.exe pkscreenercli.exe.gz
+        fi
+        echo "corrupted_executable=true" >> $GITHUB_ENV
 
     # ============================================================================
     # SAVE STOCK DATA CACHE (AFTER SCAN - Non-market hours only)

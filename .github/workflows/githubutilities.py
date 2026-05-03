@@ -187,6 +187,7 @@ def dget_latest_release_url():
             aset_output("DOWNLOAD_URL", url)
         pass
     aset_output("LAST_RELEASE_VERSION", rel_version)
+    aset_output("VERSION", rel_version)
     return url
 
 def whatsNew():
