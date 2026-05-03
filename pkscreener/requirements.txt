@@ -88,6 +88,7 @@ vectorbt==0.28.1
 numba==0.61.2
 llvmlite==0.44.0
 coverage==7.13.0
+imageio==2.37.2
 
 setuptools>=78.1.1
 # Note: pandas-ta-classic is excluded due to numpy>=2.0.0 requirement

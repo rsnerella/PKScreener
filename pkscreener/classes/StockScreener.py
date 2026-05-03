@@ -888,7 +888,7 @@ class StockScreener:
         elif executeOption == 28:
             isValid = screener.findHigherBullishOpens(processedData)
         elif executeOption == 30:
-            isValid, debug_info = screener.findATRTrailingStopsDebug(
+            isValid, _ = screener.findATRTrailingStops(
                                 fullData,
                                 sensitivity=configManager.atrTrailingStopSensitivity,
                                 atr_period=configManager.atrTrailingStopPeriod,
@@ -906,14 +906,6 @@ class StockScreener:
                                 min_strength_for_confirmation=configManager.atrTrailingStopMinStrengthForConfirmation,
                                 stock_name=stock
                             )
-            # Log debug info for first 10 stocks
-            if hasattr(hostRef, '_debug_counter'):
-                hostRef._debug_counter = getattr(hostRef, '_debug_counter', 0) + 1
-            else:
-                hostRef._debug_counter = 1
-            
-            if hostRef._debug_counter <= 200:  # Log first 20 stocks
-                hostRef.default_logger.info(f"DEBUG {stock}: {debug_info}")
         elif executeOption == 31:
             isValid = screener.findHighMomentum(processedData,strict=(subMenuOption==1))
         elif executeOption == 32: # findIntradayOpenSetup
