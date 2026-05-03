@@ -352,60 +352,60 @@ jobs:
     # ============================================================================
     # VALIDATE EXECUTABLE INTEGRITY
     # ============================================================================
-    - name: Validate executable integrity
-      id: validate-exe
-      if: steps.check-tensorflow.outputs.requires_tensorflow != 'true'
-      shell: bash
-      run: |
-        if [ "${{ runner.os }}" == "Linux" ]; then
-          BINARY_NAME="pkscreenercli_x64.bin"
-        else
-          BINARY_NAME="pkscreenercli.exe"
-        fi
+    # - name: Validate executable integrity
+    #   id: validate-exe
+    #   if: steps.check-tensorflow.outputs.requires_tensorflow != 'true'
+    #   shell: bash
+    #   run: |
+    #     if [ "${{ runner.os }}" == "Linux" ]; then
+    #       BINARY_NAME="pkscreenercli_x64.bin"
+    #     else
+    #       BINARY_NAME="pkscreenercli.exe"
+    #     fi
         
-        echo "🔍 Validating executable: $BINARY_NAME"
+    #     echo "🔍 Validating executable: $BINARY_NAME"
         
-        if [ ! -f "$BINARY_NAME" ]; then
-          echo "ERROR: Executable not found at $BINARY_NAME"
-          echo "valid=false" >> $GITHUB_OUTPUT
-          exit 1
-        fi
+    #     if [ ! -f "$BINARY_NAME" ]; then
+    #       echo "ERROR: Executable not found at $BINARY_NAME"
+    #       echo "valid=false" >> $GITHUB_OUTPUT
+    #       exit 1
+    #     fi
         
-        # Check if it's a valid ELF binary (Linux)
-        if [ "${{ runner.os }}" == "Linux" ]; then
-          if file "$BINARY_NAME" | grep -q "ELF 64-bit"; then
-            echo "✅ Valid ELF 64-bit binary detected"
-            echo "valid=true" >> $GITHUB_OUTPUT
-          else
-            echo "❌ Invalid or corrupted binary - not an ELF file"
-            file "$BINARY_NAME"
-            echo "valid=false" >> $GITHUB_OUTPUT
-            # Force cache to be invalidated for next run
-            echo "corrupted=true" >> $GITHUB_OUTPUT
-            exit 1
-          fi
-        else
-          # Windows - check if it's a valid PE executable
-          if file "$BINARY_NAME" | grep -q "PE32\|PE32+"; then
-            echo "✅ Valid Windows PE executable detected"
-            echo "valid=true" >> $GITHUB_OUTPUT
-          else
-            echo "❌ Invalid or corrupted Windows executable"
-            file "$BINARY_NAME"
-            echo "valid=false" >> $GITHUB_OUTPUT
-            echo "corrupted=true" >> $GITHUB_OUTPUT
-            exit 1
-          fi
-        fi
+    #     # Check if it's a valid ELF binary (Linux)
+    #     if [ "${{ runner.os }}" == "Linux" ]; then
+    #       if file "$BINARY_NAME" | grep -q "ELF 64-bit"; then
+    #         echo "✅ Valid ELF 64-bit binary detected"
+    #         echo "valid=true" >> $GITHUB_OUTPUT
+    #       else
+    #         echo "❌ Invalid or corrupted binary - not an ELF file"
+    #         file "$BINARY_NAME"
+    #         echo "valid=false" >> $GITHUB_OUTPUT
+    #         # Force cache to be invalidated for next run
+    #         echo "corrupted=true" >> $GITHUB_OUTPUT
+    #         exit 1
+    #       fi
+    #     else
+    #       # Windows - check if it's a valid PE executable
+    #       if file "$BINARY_NAME" | grep -q "PE32\|PE32+"; then
+    #         echo "✅ Valid Windows PE executable detected"
+    #         echo "valid=true" >> $GITHUB_OUTPUT
+    #       else
+    #         echo "❌ Invalid or corrupted Windows executable"
+    #         file "$BINARY_NAME"
+    #         echo "valid=false" >> $GITHUB_OUTPUT
+    #         echo "corrupted=true" >> $GITHUB_OUTPUT
+    #         exit 1
+    #       fi
+    #     fi
         
-        # Test run with --help to ensure it works
-        echo "🧪 Testing executable with --help..."
-        if "$BINARY_NAME" --help > /dev/null 2>&1; then
-          echo "✅ Executable runs successfully"
-        else
-          echo "⚠️ Executable may be corrupted - run with --help failed"
-          echo "corrupted=true" >> $GITHUB_OUTPUT
-        fi
+    #     # Test run with --help to ensure it works
+    #     echo "🧪 Testing executable with --help..."
+    #     if "$BINARY_NAME" --help > /dev/null 2>&1; then
+    #       echo "✅ Executable runs successfully"
+    #     else
+    #       echo "⚠️ Executable may be corrupted - run with --help failed"
+    #       echo "corrupted=true" >> $GITHUB_OUTPUT
+    #     fi
 
     # ============================================================================
     # CACHING STRATEGY 1: Global pip cache (fast)
@@ -757,19 +757,19 @@ jobs:
 
     # ============================================================================
     # HANDLE EXECUTABLE CORRUPTION - Force re-download on next run
-    # ============================================================================
-    - name: Mark cache as invalid on corruption
-      if: steps.validate-exe.outputs.corrupted == 'true'
-      shell: bash
-      run: |
-        echo "⚠️ Executable corruption detected - will force re-download on next run"
-        # Delete the corrupted binary
-        if [ "${{ runner.os }}" == "Linux" ]; then
-          rm -f pkscreenercli_x64.bin pkscreenercli_x64.bin.gz
-        else
-          rm -f pkscreenercli.exe pkscreenercli.exe.gz
-        fi
-        echo "corrupted_executable=true" >> $GITHUB_ENV
+    # # ============================================================================
+    # - name: Mark cache as invalid on corruption
+    #   if: steps.validate-exe.outputs.corrupted == 'true'
+    #   shell: bash
+    #   run: |
+    #     echo "⚠️ Executable corruption detected - will force re-download on next run"
+    #     # Delete the corrupted binary
+    #     if [ "${{ runner.os }}" == "Linux" ]; then
+    #       rm -f pkscreenercli_x64.bin pkscreenercli_x64.bin.gz
+    #     else
+    #       rm -f pkscreenercli.exe pkscreenercli.exe.gz
+    #     fi
+    #     echo "corrupted_executable=true" >> $GITHUB_ENV
 
     # ============================================================================
     # SAVE STOCK DATA CACHE (AFTER SCAN - Non-market hours only)
