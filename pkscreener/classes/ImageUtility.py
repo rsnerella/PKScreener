@@ -497,7 +497,7 @@ class PKImageTools:
         )
         
         return {
-            'width': im_width,
+            'width': im_width + 200,
             'height': im_height,
             'startColValue': startColValue,
             'xVertical': startColValue,

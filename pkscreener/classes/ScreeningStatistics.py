@@ -6573,7 +6573,7 @@ class ScreeningStatistics:
                     return False
             
             # =========================================================================
-            # STEP 11: 70% RULE
+            # STEP 11: 70% RULE - Pullback percentage of each leg should be ≤ 70% of the previous leg
             # =========================================================================
             if enable_filters:
                 pullback_threshold = float(getattr(self.configManager, 'vcp321RulePullbackPercentage', 70)) / 100

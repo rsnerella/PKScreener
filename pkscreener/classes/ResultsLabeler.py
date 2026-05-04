@@ -605,4 +605,10 @@ def label_data_for_printing_impl(
     screen_results.dropna(how="all" if menu_option not in ["F"] else "any", axis=1, inplace=True)
     save_results.dropna(how="all" if menu_option not in ["F"] else "any", axis=1, inplace=True)
     
+    columns_to_be_deleted = []
+    for col in save_results.columns:
+        if col not in screen_results.columns:
+            columns_to_be_deleted.append(col)
+    for col in columns_to_be_deleted:
+        save_results.drop(col, axis=1, inplace=True, errors="ignore")
     return screen_results, save_results
