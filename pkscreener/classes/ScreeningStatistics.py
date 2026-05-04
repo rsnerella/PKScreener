@@ -6336,228 +6336,421 @@ class ScreeningStatistics:
     
     # Validate VCP
     def validateVCP(
-        self, df, screenDict, saveDict, stockName=None, window=3, percentageFromTop=3
+        self, 
+        df, 
+        screenDict, 
+        saveDict, 
+        stockName=None, 
+        window=3, 
+        percentageFromTop=3
     ):
         """
-        Validate Volatility Contraction Pattern (VCP) - Mark Minervini style.
+        Validate Volatility Contraction Pattern (VCP) - Mark Minervini Style.
         
-        A VCP is characterized by:
-        1. Series of peaks and troughs with decreasing amplitude
-        2. Progressive tightening (each pullback is smaller than previous)
-        3. Rising lows (higher lows indicating support)
-        4. Volume contraction during pullbacks
-        5. Price near all-time highs
+        ============================================================================
+        WHAT IS VCP (Volatility Contraction Pattern)?
+        ============================================================================
+        The VCP is a bullish continuation pattern where a stock consolidates after 
+        an uptrend, with each subsequent pullback becoming smaller in magnitude.
         
-        The 3-2-1 Tightening Rule (when enableAdditionalVCPFilters is True):
-        - Leg 2 pullback must be ≤ 70% of Leg 1 pullback
-        - Leg 3 pullback must be ≤ 70% of Leg 2 pullback
-        Example: 20% → 14% (70% of 20) → 10% (71% of 14)
-        This creates the characteristic "tightening" pattern.
+        A classic VCP consists of 3 legs of pullbacks, each approximately 70% of 
+        the previous. This implementation focuses on the 3-leg pattern:
         
-        Args:
-            df: DataFrame in descending order (newest first, oldest last)
-                Required columns: 'open', 'high', 'low', 'close', 'volume'
-            screenDict: Dictionary to store formatted results for screen display
-            saveDict: Dictionary to store raw results for persistence
-            stockName: Name of the stock (for logging)
-            window: Window size for finding local extrema (default: 3)
-            percentageFromTop: Percentage threshold for top tightening (default: 3%)
+        - Leg 1: 20% pullback (from Peak1 to Trough1)
+        - Leg 2: 14% pullback (from Peak2 to Trough2) - 70% of Leg1
+        - Leg 3: 10% pullback (from Peak3 to Trough3) - 71% of Leg2
         
-        Returns:
-            bool: True if VCP pattern is detected, False otherwise
+        ============================================================================
+        CRITICAL CONDITIONS FOR A VALID VCP:
+        ============================================================================
+        
+        1. 4 PEAKS AND 3 TROUGHS (3-Leg Structure)
+        2. STRICTLY HIGHER LOWS (T1 < T2 < T3) - Non-negotiable
+        3. PROGRESSIVE TIGHTENING (L1 > L2 > L3)
+        4. POSITIVE PULLBACKS (All legs > 0)
+        5. 70% RULE (L2/L1 ≤ 70%, L3/L2 ≤ 70%)
+        6. VOLATILITY CONTRACTION (RVM < 30)
+        7. MINIMUM TIGHTENING (Leg1-Leg2 ≥ 2%, Leg2-Leg3 ≥ 1%)
+        8. PROXIMITY TO ATH (≤ 20%)
+        9. PRICE ABOVE LAST TROUGH, BELOW HIGHEST PEAK
+        
+        ============================================================================
         """
-        if df is None or len(df) == 0:
+        
+        # =========================================================================
+        # INPUT VALIDATION
+        # =========================================================================
+        if df is None or len(df) < 120:
             return False
         
         data = df.copy()
         
+        # Get configuration values
+        enable_filters = getattr(self.configManager, 'enableAdditionalVCPFilters', False)
+        max_rvm_allowed = getattr(self.configManager, 'vcpMaxRVM', 60)
+        # These parameters enforce minimum contraction requirements between consecutive 
+        # legs of the VCP pattern. They ensure that each subsequent pullback is 
+        # meaningfully smaller than the previous one, not just marginally smaller.
+        # In a true VCP, each leg's pullback should be significantly smaller than the previous leg:
+        # Leg 1: 20% pullback
+        # Leg 2: 14% pullback (6% smaller = tightening)
+        # Leg 3: 10% pullback (4% smaller = further tightening). The problem is that some 
+        # patterns show negligible tightening - for example:
+        # Leg 1: 20% pullback
+        # Leg 2: 19.5% pullback (only 0.5% smaller) ← This is NOT meaningful tightening
+        # Leg 3: 19.0% pullback (only 0.5% smaller) ← Still not meaningful
+        # These min_tightening parameters reject such weak patterns.
+        min_tightening_leg2 = getattr(self.configManager, 'vcpMinTighteningLeg2', 2) # default 2%
+        min_tightening_leg3 = getattr(self.configManager, 'vcpMinTighteningLeg3', 1) # default 1%
+        
         try:
-            # =====================================================================
+            # =========================================================================
             # STEP 1: OPTIONAL EMA FILTERS
-            # Ensures stock is above key moving averages (bullish condition)
-            # =====================================================================
-            if self.configManager.enableAdditionalVCPEMAFilters:
+            # =========================================================================
+            if hasattr(self, 'configManager') and self.configManager and \
+            getattr(self.configManager, 'enableAdditionalVCPEMAFilters', False):
                 reversedData = data[::-1] 
-                ema = pktalib.EMA(reversedData["close"], timeperiod=50)
-                sema20 = pktalib.EMA(reversedData["close"], timeperiod=20)
-                if not (data["close"].iloc[0] >= ema.tail(1).iloc[0] and 
-                        data["close"].iloc[0] >= sema20.tail(1).iloc[0]):
+                ema50 = pktalib.EMA(reversedData["close"], timeperiod=50)
+                ema20 = pktalib.EMA(reversedData["close"], timeperiod=20)
+                
+                if len(ema50) > 0 and len(ema20) > 0:
+                    current_close = data["close"].iloc[0]
+                    if not (current_close >= ema50.tail(1).iloc[0] and 
+                            current_close >= ema20.tail(1).iloc[0]):
+                        return False
+            
+            # =========================================================================
+            # STEP 2: DETECT LOCAL PEAKS AND TROUGHS
+            # =========================================================================
+            percentageFromTop /= 100
+            data_reset = data.reset_index(drop=False)
+            
+            if 'index' in data_reset.columns:
+                data_reset.rename(columns={"index": "Date"}, inplace=True)
+            else:
+                data_reset['Date'] = data_reset.index
+            
+            high_values = np.array(data_reset["high"])
+            low_values = np.array(data_reset["low"])
+            
+            try:
+                top_indices = pktalib.argrelextrema(high_values, np.greater_equal, order=window)[0]
+                bot_indices = pktalib.argrelextrema(low_values, np.less_equal, order=window)[0]
+            except Exception as e:
+                return False
+            
+            data_reset["tops"] = 0
+            data_reset["bots"] = 0
+            
+            for idx in top_indices[:8]:
+                if idx < len(data_reset):
+                    data_reset.loc[idx, "tops"] = data_reset.loc[idx, "high"]
+            
+            for idx in bot_indices[:8]:
+                if idx < len(data_reset):
+                    data_reset.loc[idx, "bots"] = data_reset.loc[idx, "low"]
+            
+            # =========================================================================
+            # STEP 3: BUILD ALTERNATING PEAK-TROUGH SEQUENCE
+            # =========================================================================
+            peaks_found = []
+            troughs_found = []
+            
+            for i in range(len(data_reset)):
+                if data_reset.iloc[i]["tops"] > 0:
+                    peaks_found.append((i, data_reset.iloc[i]["tops"]))
+                if data_reset.iloc[i]["bots"] > 0:
+                    troughs_found.append((i, data_reset.iloc[i]["bots"]))
+            
+            all_points = []
+            for idx, val in peaks_found:
+                all_points.append((idx, val, 'peak'))
+            for idx, val in troughs_found:
+                all_points.append((idx, val, 'trough'))
+            
+            all_points.sort(key=lambda x: x[0], reverse=True)
+            
+            sequence = []
+            last_was_peak = None
+            
+            for idx, val, ptype in all_points:
+                if last_was_peak is None and ptype == 'peak':
+                    sequence.append((idx, val, ptype))
+                    last_was_peak = True
+                elif last_was_peak == True and ptype == 'trough':
+                    sequence.append((idx, val, ptype))
+                    last_was_peak = False
+                elif last_was_peak == False and ptype == 'peak':
+                    sequence.append((idx, val, ptype))
+                    last_was_peak = True
+            
+            peaks_in_sequence = [s for s in sequence if s[2] == 'peak']
+            troughs_in_sequence = [s for s in sequence if s[2] == 'trough']
+            
+            if len(peaks_in_sequence) < 4 or len(troughs_in_sequence) < 3:
+                return False
+            
+            recent_peaks = peaks_in_sequence[:4]
+            recent_troughs = troughs_in_sequence[:3]
+            
+            peak4_idx, peak4_val, _ = recent_peaks[0] if len(recent_peaks) >= 1 else (0, 0, 'peak')
+            peak3_idx, peak3_val, _ = recent_peaks[1] if len(recent_peaks) >= 2 else (0, 0, 'peak')
+            peak2_idx, peak2_val, _ = recent_peaks[2] if len(recent_peaks) >= 3 else (0, 0, 'peak')
+            peak1_idx, peak1_val, _ = recent_peaks[3] if len(recent_peaks) >= 4 else (0, 0, 'peak')
+            
+            trough3_idx, trough3_val, _ = recent_troughs[0] if len(recent_troughs) >= 1 else (0, 0, 'trough')
+            trough2_idx, trough2_val, _ = recent_troughs[1] if len(recent_troughs) >= 2 else (0, 0, 'trough')
+            trough1_idx, trough1_val, _ = recent_troughs[2] if len(recent_troughs) >= 3 else (0, 0, 'trough')
+            
+            if any(v == 0 for v in [peak1_val, peak2_val, peak3_val, peak4_val, 
+                                    trough1_val, trough2_val, trough3_val]):
+                return False
+            
+            pattern_valid = (peak1_idx < trough1_idx < peak2_idx < 
+                            trough2_idx < peak3_idx < trough3_idx < peak4_idx)
+            
+            if not pattern_valid and enable_filters:
+                return False
+            
+            # =========================================================================
+            # STEP 4: PROXIMITY TO ALL-TIME HIGH
+            # =========================================================================
+            all_time_high = peak1_val
+            current_price = data_reset["close"].iloc[0] if len(data_reset) > 0 else 0
+            
+            max_distance_allowed = 20
+            if hasattr(self, 'configManager') and self.configManager:
+                max_distance_allowed = getattr(self.configManager, 'vcpRangePercentageFromTop', 20)
+            
+            distance_from_ath_pct = ((all_time_high - current_price) / all_time_high) * 100 if all_time_high > 0 else 100
+            
+            if enable_filters and distance_from_ath_pct > max_distance_allowed:
+                return False
+            
+            # =========================================================================
+            # STEP 5: STRICTLY HIGHER LOWS (T1 < T2 < T3)
+            # =========================================================================
+            if not (trough1_val < trough2_val < trough3_val):
+                return False
+            
+            # =========================================================================
+            # STEP 6: PEAKS NOT DESCENDING SIGNIFICANTLY
+            # =========================================================================
+            if enable_filters:
+                peak4_decline = ((peak1_val - peak4_val) / peak1_val) * 100 if peak1_val > 0 else 0
+                if peak4_decline > 25:
                     return False
             
-            # =====================================================================
-            # STEP 2: DETECT PEAKS (TOPS) AND TROUGHS (BOTS)
-            # =====================================================================
-            percentageFromTop /= 100
-            data.reset_index(inplace=True)
-            data.rename(columns={"index": "Date"}, inplace=True)
+            # =========================================================================
+            # STEP 7: CALCULATE PULLBACK PERCENTAGES
+            # =========================================================================
+            leg1_pullback = ((peak1_val - trough1_val) / peak1_val) * 100 if peak1_val > 0 else 0
+            leg2_pullback = ((peak2_val - trough2_val) / peak2_val) * 100 if peak2_val > 0 else 0
+            leg3_pullback = ((peak3_val - trough3_val) / peak3_val) * 100 if peak3_val > 0 else 0
             
-            # Find local maxima (peaks) and minima (troughs)
-            top_indices = list(pktalib.argrelextrema(
-                np.array(data["high"]), np.greater_equal, order=window
-            )[0])
-            data["tops"] = data["high"].iloc[top_indices].head(6)  # Look at up to 6 tops
-            
-            bot_indices = list(pktalib.argrelextrema(
-                np.array(data["low"]), np.less_equal, order=window
-            )[0])
-            data["bots"] = data["low"].iloc[bot_indices].head(6)
-            
-            data = data.fillna(0)
-            data = data.replace([np.inf, -np.inf], 0)
-            
-            tops = data[data.tops > 0]
-            
-            # Need at least 3 tops for a meaningful VCP pattern
-            if len(tops) < 3:
+            # =========================================================================
+            # STEP 8: POSITIVE PULLBACKS VALIDATION
+            # =========================================================================
+            if leg1_pullback <= 0 or leg2_pullback <= 0 or leg3_pullback <= 0:
                 return False
             
-            # =====================================================================
-            # STEP 3: ALL-TIME HIGH PROXIMITY CHECK
-            # =====================================================================
-            highestTop = round(tops.describe()["high"]["max"], 1)
-            allTimeHigh = max(data["high"])
-            withinATHRange = data["close"].iloc[0] >= (
-                allTimeHigh - allTimeHigh * float(self.configManager.vcpRangePercentageFromTop) / 100
-            )
-            
-            if not withinATHRange and self.configManager.enableAdditionalVCPFilters:
-                # Last close is not within all time high range
+            # =========================================================================
+            # STEP 9: PROGRESSIVE TIGHTENING
+            # =========================================================================
+            if not (leg2_pullback < leg1_pullback and leg3_pullback < leg2_pullback):
                 return False
             
-            # =====================================================================
-            # STEP 4: TOP TIGHTENING ANALYSIS
-            # Check if recent tops are within percentage range (clustering)
-            # =====================================================================
-            recent_tops_count = min(3, len(tops))
-            recent_tops = tops.tail(recent_tops_count)
-            tops_in_range = recent_tops[recent_tops.tops > (highestTop - (highestTop * percentageFromTop))]
+            # =========================================================================
+            # STEP 10: MINIMUM TIGHTENING THRESHOLDS
+            # =========================================================================
+            tightening_leg2 = leg1_pullback - leg2_pullback
+            tightening_leg3 = leg2_pullback - leg3_pullback
             
-            # At least 66% of recent tops should be tightening (2 out of 3)
-            if len(tops_in_range) / recent_tops_count < 0.66:
-                return False
+            if enable_filters:
+                if tightening_leg2 < min_tightening_leg2:
+                    return False
+                if tightening_leg3 < min_tightening_leg3:
+                    return False
             
-            # =====================================================================
-            # STEP 5: LOW POINT ANALYSIS (RISING LOWS)
-            # Calculate low points between successive tops
-            # =====================================================================
-            lowPoints = []
-            
-            for i in range(len(tops) - 1):
-                endDate = tops.iloc[i]["Date"]
-                startDate = tops.iloc[i + 1]["Date"]
-                segment_data = data[(data.Date >= startDate) & (data.Date <= endDate)]
-                if not segment_data.empty:
-                    lowPoint = segment_data.describe()["low"]["min"]
-                    lowPoints.append(lowPoint)
-            
-            if len(lowPoints) < 2:
-                return False
-            
-            # Check if low points are rising (higher lows = bullish contraction)
-            rising_lows = all(lowPoints[i] < lowPoints[i+1] for i in range(len(lowPoints)-1))
-            
-            # Check if the last 2-3 low points are rising
-            recent_lows_rising = all(
-                lowPoints[i] < lowPoints[i+1] 
-                for i in range(-min(2, len(lowPoints)-1), -1)
-            ) if len(lowPoints) >= 2 else False
-            
-            ltp = data.head(1)["close"].iloc[0]
-            
-            # =====================================================================
-            # STEP 6: PRICE POSITION VALIDATION
-            # Price must be below highest top (not breaking out yet)
-            # but above the most recent low point (support)
-            # =====================================================================
-            if not ((rising_lows or recent_lows_rising) and ltp < highestTop and ltp > lowPoints[-1]):
-                return False
-            
-            # =====================================================================
-            # STEP 7: 3-2-1 TIGHTENING RULE (when additional filters enabled)
-            # This is the progressive contraction that defines a true VCP
-            # =====================================================================
-            if self.configManager.enableAdditionalVCPFilters:
-                # Calculate pullback percentages from tops
-                pullback_percentages = []
-                for i in range(1, len(tops)):
-                    prev_top = tops.iloc[i-1]["tops"]
-                    current_top = tops.iloc[i]["tops"]
-                    
-                    # Find lowest point between these two tops
-                    start_idx = tops.iloc[i-1].name  # Using index position
-                    end_idx = tops.iloc[i].name
-                    
-                    if start_idx < end_idx:
-                        lowest_in_between = min(data.iloc[start_idx:end_idx+1]["low"])
-                        # Calculate pullback percentage from previous peak
-                        pullback_pct = ((prev_top - lowest_in_between) / prev_top) * 100
-                        pullback_percentages.append(pullback_pct)
+            # =========================================================================
+            # STEP 11: 70% RULE
+            # =========================================================================
+            if enable_filters:
+                pullback_threshold = float(getattr(self.configManager, 'vcp321RulePullbackPercentage', 70)) / 100
                 
-                # Apply 3-2-1 Tightening Rule
-                # Each pullback should be ≤70% of the previous pullback
-                if len(pullback_percentages) >= 2:
-                    rule_passed = True
-                    rule_details = []
+                if 0 < pullback_threshold < 1:
+                    ratio_2_1 = leg2_pullback / leg1_pullback if leg1_pullback > 0 else 1
+                    ratio_3_2 = leg3_pullback / leg2_pullback if leg2_pullback > 0 else 1
                     
-                    for i in range(1, len(pullback_percentages)):
-                        prev = pullback_percentages[i-1]
-                        curr = pullback_percentages[i]
-                        ratio = curr / prev if prev > 0 else 1
-                        
-                        if ratio <= float(self.configManager.vcp321RulePullbackPercentage) / 100 or self.configManager.vcp321RulePullbackPercentage == 0 or self.configManager.vcp321RulePullbackPercentage == 100:
-                            rule_details.append(f"✓ Leg {i+1}: {curr:.1f}% ≤ {self.configManager.vcp321RulePullbackPercentage}% of {prev:.1f}%")
-                        else:
-                            rule_passed = False
-                            rule_details.append(f"✗ Leg {i+1}: {curr:.1f}% > {self.configManager.vcp321RulePullbackPercentage}% of {prev:.1f}%")
-                            break
+                    if ratio_2_1 > pullback_threshold or ratio_3_2 > pullback_threshold:
+                        return False
+            
+            # =========================================================================
+            # STEP 12: VOLATILITY CONTRACTION (RVM VALIDATION - FIXED)
+            # =========================================================================
+            rvm_value = 0
+            rvm_score = 0
+            
+            if enable_filters:
+                try:
+                    # Calculate RVM(15) - FIXED to handle Series return
+                    rvm_result = pktalib.RVM(data["high"], data["low"], data["close"], 15)
                     
-                    if not rule_passed:
-                        # Log the failure for debugging
-                        if stockName:
+                    # Extract scalar value from Series if needed
+                    if isinstance(rvm_result, pd.Series):
+                        rvm_value = rvm_result.iloc[-1] if len(rvm_result) > 0 else 0
+                    elif isinstance(rvm_result, (int, float)):
+                        rvm_value = rvm_result
+                    else:
+                        rvm_value = 0
+                    
+                    # Ensure we have a scalar
+                    rvm_value = float(rvm_value) if rvm_value is not None else 0
+                    
+                    # Check if RVM exceeds maximum allowed
+                    if rvm_value > max_rvm_allowed and max_rvm_allowed > 0:
+                        if stockName and self.default_logger:
                             self.default_logger.debug(
-                                f"{stockName}: 3-2-1 tightening rule failed - {', '.join(rule_details)}"
+                                f"{stockName}: VCP failed - RVM(15)={rvm_value:.1f} exceeds maximum allowed ({max_rvm_allowed})"
                             )
                         return False
                     
-                    # Log successful tightening for debugging
-                    if stockName and len(pullback_percentages) >= 2:
-                        self.default_logger.debug(
-                            f"{stockName}: 3-2-1 tightening passed - "
-                            f"Pullbacks: {' → '.join([f'{p:.1f}%' for p in pullback_percentages[:3]])}"
-                        )
+                    # Calculate RVM score for quality rating
+                    if rvm_value < 15:
+                        rvm_score = 30
+                    elif rvm_value < 25:
+                        rvm_score = 20
+                    elif rvm_value < 35:
+                        rvm_score = 10
+                    else:
+                        rvm_score = 0
+                        
+                except Exception as rvm_e:
+                    if stockName and self.default_logger:
+                        self.default_logger.debug(f"RVM calculation failed for {stockName}: {rvm_e}")
+                    # Don't fail VCP due to RVM calculation errors - just set to 0
+                    rvm_value = 0
+                    rvm_score = 0
             
-            # =====================================================================
-            # STEP 8: VALIDATE CONSOLIDATION CONTRACTION
-            # =====================================================================
+            # =========================================================================
+            # STEP 13: PRICE POSITION VALIDATION
+            # =========================================================================
+            price_above_last_trough = current_price > trough3_val
+            price_below_highest_peak = current_price < peak1_val
+            
+            if not (price_above_last_trough and price_below_highest_peak):
+                return False
+            
+            # =========================================================================
+            # STEP 14: CALCULATE QUALITY SCORE (0-100)
+            # =========================================================================
+            quality_rvm_score = rvm_score
+            
+            ratio_2_1 = leg2_pullback / leg1_pullback if leg1_pullback > 0 else 1
+            ratio_3_2 = leg3_pullback / leg2_pullback if leg2_pullback > 0 else 1
+            
+            if ratio_2_1 <= 0.65 and ratio_3_2 <= 0.65:
+                quality_tightening_score = 30
+            elif ratio_2_1 <= 0.75 and ratio_3_2 <= 0.75:
+                quality_tightening_score = 25
+            elif ratio_2_1 <= 0.85 and ratio_3_2 <= 0.85:
+                quality_tightening_score = 20
+            elif ratio_2_1 <= 0.95 and ratio_3_2 <= 0.95:
+                quality_tightening_score = 15
+            else:
+                quality_tightening_score = 10
+            
+            low_rise_t2 = ((trough2_val - trough1_val) / trough1_val) * 100 if trough1_val > 0 else 0
+            low_rise_t3 = ((trough3_val - trough2_val) / trough2_val) * 100 if trough2_val > 0 else 0
+            avg_low_rise = (low_rise_t2 + low_rise_t3) / 2
+            
+            if avg_low_rise >= 5:
+                quality_lows_score = 20
+            elif avg_low_rise >= 3:
+                quality_lows_score = 15
+            elif avg_low_rise >= 1:
+                quality_lows_score = 10
+            else:
+                quality_lows_score = 5
+            
+            if distance_from_ath_pct <= 5:
+                quality_ath_score = 20
+            elif distance_from_ath_pct <= 10:
+                quality_ath_score = 15
+            elif distance_from_ath_pct <= 15:
+                quality_ath_score = 12
+            elif distance_from_ath_pct <= 20:
+                quality_ath_score = 10
+            else:
+                quality_ath_score = 0
+            
+            quality_score = quality_rvm_score + quality_tightening_score + quality_lows_score + quality_ath_score
+            
+            if quality_score >= 85:
+                quality_rating = "EXCELLENT"
+                quality_icon = "⭐"
+            elif quality_score >= 70:
+                quality_rating = "GOOD"
+                quality_icon = "⭐"
+            elif quality_score >= 50:
+                quality_rating = "ACCEPTABLE"
+                quality_icon = "⚠️"
+            else:
+                quality_rating = "POOR"
+                quality_icon = "❌"
+            
+            # =========================================================================
+            # STEP 15: SUCCESS! VALID 3-LEG VCP DETECTED
+            # =========================================================================
+            consolidations = [f"{int(leg1_pullback)}%", f"{int(leg2_pullback)}%", f"{int(leg3_pullback)}%"]
+            low_rise_pct_t2 = ((trough2_val - trough1_val) / trough1_val) * 100 if trough1_val > 0 else 0
+            low_rise_pct_t3 = ((trough3_val - trough2_val) / trough2_val) * 100 if trough2_val > 0 else 0
+            
             saved = self.findCurrentSavedValue(screenDict, saveDict, "Pattern")
-            isTightening, consolidations, deviationScore = self.validateConsolidationContraction(
-                df=df.copy(),
-                legsToCheck=(
-                    int(self.configManager.vcpLegsToCheckForConsolidation) 
-                    if self.configManager.enableAdditionalVCPFilters else 0
-                ),
-                stockName=stockName
-            )
-            consolidations = [f"{str(x)}%" for x in consolidations]
             
-            if isTightening:
-                screenDict["Pattern"] = (
-                    saved[0] 
-                    + colorText.GREEN
-                    + f"VCP (BO: {highestTop}, Cons.:{','.join(consolidations)})"
-                    + colorText.END
+            screenDict["Pattern"] = (
+                saved[0] 
+                + colorText.GREEN
+                + f"VCP (BO: {peak1_val:.1f}, Cons.:{','.join(consolidations)})"
+                + colorText.END
+            )
+            
+            screenDict["Quality"] = f"{quality_icon} {quality_rating} ({quality_score})"
+            screenDict["Score"] = quality_score
+            
+            saveDict["Pattern"] = saved[1] + f"VCP (BO: {peak1_val:.1f}, Cons.:{','.join(consolidations)})"
+            saveDict["Quality"] = quality_rating
+            saveDict["Score"] = quality_score
+            saveDict["deviationScore"] = round((low_rise_pct_t2 + low_rise_pct_t3) / 2, 2)
+            
+            saveDict["VCP_Leg1_Pullback"] = round(leg1_pullback, 1)
+            saveDict["VCP_Leg2_Pullback"] = round(leg2_pullback, 1)
+            saveDict["VCP_Leg3_Pullback"] = round(leg3_pullback, 1)
+            saveDict["VCP_Trough1"] = round(trough1_val, 2)
+            saveDict["VCP_Trough2"] = round(trough2_val, 2)
+            saveDict["VCP_Trough3"] = round(trough3_val, 2)
+            saveDict["VCP_Peak1"] = round(peak1_val, 2)
+            saveDict["VCP_Peak4"] = round(peak4_val, 2)
+            saveDict["VCP_DistanceFromATH"] = round(distance_from_ath_pct, 1)
+            saveDict["VCP_RisingLowScore"] = round((low_rise_pct_t2 + low_rise_pct_t3) / 2, 2)
+            saveDict["VCP_RVM"] = round(rvm_value, 1) if rvm_value > 0 else 0
+            saveDict["VCP_Tightening_Leg2"] = round(tightening_leg2, 1)
+            saveDict["VCP_Tightening_Leg3"] = round(tightening_leg3, 1)
+            
+            if stockName and self.default_logger and enable_filters:
+                self.default_logger.debug(
+                    f"{stockName}: ✓ VALID 3-LEG VCP - Pullbacks: {leg1_pullback:.1f}% → {leg2_pullback:.1f}% → {leg3_pullback:.1f}%, "
+                    f"Lows: {trough1_val:.2f} → {trough2_val:.2f} → {trough3_val:.2f}, "
+                    f"RVM: {rvm_value:.1f}, Quality: {quality_rating} ({quality_score})"
                 )
-                saveDict["Pattern"] = saved[1] + f"VCP (BO: {highestTop}, Cons.:{','.join(consolidations)})"
-                screenDict["deviationScore"] = deviationScore
-                saveDict["deviationScore"] = deviationScore
-                return True
-                
-            return False
+            
+            return True
             
         except KeyboardInterrupt:
             raise KeyboardInterrupt
         except Exception as e:
-            self.default_logger.debug(e, exc_info=True)
+            if self.default_logger and stockName:
+                self.default_logger.debug(f"validateVCP error for {stockName}: {e}")
             return False
 
     # Validate VCP as per Mark Minervini

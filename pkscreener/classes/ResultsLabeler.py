@@ -500,9 +500,9 @@ def label_data_for_printing_impl(
                     sort_key = ["volume"]
                     ascending = [False]
             elif reversal_option in [4]:
-                if "deviationScore" in save_results.columns:
-                    sort_key = ["deviationScore"]
-                    ascending = [True]
+                if "Score" in save_results.columns:
+                    sort_key = ["Score"]
+                    ascending = [False]
                 else:
                     sort_key = ["volume"]
                     ascending = [False]
@@ -539,7 +539,7 @@ def label_data_for_printing_impl(
             default_logger().debug(e, exc_info=True)
         
         # Columns to delete
-        columns_to_be_deleted = ["MFI", "FVDiff", "ConfDMADifference", "bbands_ulr_ratio_max5", "RSIi","Confidence"]
+        columns_to_be_deleted = ["MFI", "FVDiff", "ConfDMADifference", "bbands_ulr_ratio_max5", "RSIi"]
         if menu_option not in ["F"]:
             columns_to_be_deleted.extend(["ScanOption"])
         if "EoDDiff" in save_results.columns:
@@ -548,6 +548,10 @@ def label_data_for_printing_impl(
             columns_to_be_deleted.extend(["SuperConfSort"])
         if "deviationScore" in save_results.columns:
             columns_to_be_deleted.extend(["deviationScore"])
+        if "Confidence" in save_results.columns:
+            columns_to_be_deleted.extend(["Confidence"])
+        if "Score" in save_results.columns:
+            columns_to_be_deleted.extend(["Score"])
         if (user_passed_args is not None and 
             user_passed_args.options is not None and 
             user_passed_args.options.upper().startswith("C")):
