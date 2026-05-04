@@ -6715,27 +6715,27 @@ class ScreeningStatistics:
                 + colorText.END
             )
             
-            screenDict["Quality"] = f"{quality_icon} {quality_rating} ({quality_score})"
+            screenDict["Quality(Score)"] = f"{quality_icon} {quality_rating} ({quality_score})"
             screenDict["Score"] = quality_score
             
             saveDict["Pattern"] = saved[1] + f"VCP (BO: {peak1_val:.1f}, Cons.:{','.join(consolidations)})"
-            saveDict["Quality"] = quality_rating
+            saveDict["Quality(Score)"] = f"{quality_icon} {quality_rating} ({quality_score})"
             saveDict["Score"] = quality_score
             saveDict["deviationScore"] = round((low_rise_pct_t2 + low_rise_pct_t3) / 2, 2)
             
-            saveDict["VCP_Leg1_Pullback"] = round(leg1_pullback, 1)
-            saveDict["VCP_Leg2_Pullback"] = round(leg2_pullback, 1)
-            saveDict["VCP_Leg3_Pullback"] = round(leg3_pullback, 1)
-            saveDict["VCP_Trough1"] = round(trough1_val, 2)
-            saveDict["VCP_Trough2"] = round(trough2_val, 2)
-            saveDict["VCP_Trough3"] = round(trough3_val, 2)
-            saveDict["VCP_Peak1"] = round(peak1_val, 2)
-            saveDict["VCP_Peak4"] = round(peak4_val, 2)
-            saveDict["VCP_DistanceFromATH"] = round(distance_from_ath_pct, 1)
-            saveDict["VCP_RisingLowScore"] = round((low_rise_pct_t2 + low_rise_pct_t3) / 2, 2)
-            saveDict["VCP_RVM"] = round(rvm_value, 1) if rvm_value > 0 else 0
-            saveDict["VCP_Tightening_Leg2"] = round(tightening_leg2, 1)
-            saveDict["VCP_Tightening_Leg3"] = round(tightening_leg3, 1)
+            # saveDict["VCP_Leg1_Pullback"] = round(leg1_pullback, 1)
+            # saveDict["VCP_Leg2_Pullback"] = round(leg2_pullback, 1)
+            # saveDict["VCP_Leg3_Pullback"] = round(leg3_pullback, 1)
+            # saveDict["VCP_Trough1"] = round(trough1_val, 2)
+            # saveDict["VCP_Trough2"] = round(trough2_val, 2)
+            # saveDict["VCP_Trough3"] = round(trough3_val, 2)
+            # saveDict["VCP_Peak1"] = round(peak1_val, 2)
+            # saveDict["VCP_Peak4"] = round(peak4_val, 2)
+            # saveDict["VCP_DistanceFromATH"] = round(distance_from_ath_pct, 1)
+            # saveDict["VCP_RisingLowScore"] = round((low_rise_pct_t2 + low_rise_pct_t3) / 2, 2)
+            # saveDict["VCP_RVM"] = round(rvm_value, 1) if rvm_value > 0 else 0
+            # saveDict["VCP_Tightening_Leg2"] = round(tightening_leg2, 1)
+            # saveDict["VCP_Tightening_Leg3"] = round(tightening_leg3, 1)
             
             if stockName and self.default_logger and enable_filters:
                 self.default_logger.debug(

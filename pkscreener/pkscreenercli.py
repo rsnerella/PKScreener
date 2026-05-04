@@ -594,6 +594,8 @@ class LoggerSetup:
             log_file_path=log_file_path,
             filter=None,
         )
+        # Log for everything
+        log.set_selective_debug(enabled=False)
 
 
 # =============================================================================
