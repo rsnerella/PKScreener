@@ -29,9 +29,18 @@ from PKDevTools.classes.PKDateUtilities import PKDateUtilities
 
 import pkscreener.classes.ConfigManager as ConfigManager
 from pkscreener.classes.Fetcher import screenerStockDataFetcher
+from pkscreener.classes.PKAnalytics import AnalyticsCategory, track_event
 
 configManager = ConfigManager.tools()
 
+@track_event(
+    category=AnalyticsCategory.SYSTEM,
+    action="workflow_trigger",
+    label="workflow_{options}",
+    capture_params=["workflowType", "repo", "owner", "branch", "workflow_name"],
+    capture_result=False,
+    log_args=False  # Set to True for debugging, False in production
+)
 def run_workflow(command=None, user=None, options=None, workflowType="B",repo=None,owner=None,branch=None,ghp_token=None,workflow_name=None,workflow_postData=None):
     if owner is None:
         owner = os.popen('git ls-remote --get-url origin | cut -d/ -f4').read().replace("\n","")

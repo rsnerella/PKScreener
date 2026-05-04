@@ -1434,12 +1434,20 @@ class PKAssetsManager:
         data = df_save.copy()
         try:
             data = data.fillna(0)
-            data = data.replace([np.inf, -np.inf], 0)
+            
+            # FIX: Handle Series vs DataFrame differently
+            if isinstance(data, pd.Series):
+                # For Series, use numpy where
+                data = pd.Series(np.where(np.isinf(data), 0, data), index=data.index)
+            else:
+                # For DataFrame, handle column by column
+                for col in data.select_dtypes(include=[np.number]).columns:
+                    data[col] = data[col].replace([np.inf, -np.inf], 0)
             data = ImageUtility.PKImageTools.removeAllColorStyles(data)
-        except KeyboardInterrupt: # pragma: no cover
+        except KeyboardInterrupt:
             raise KeyboardInterrupt
-        except Exception as e: # pragma: no cover
-            default_logger().debug(e,exc_info=True)
+        except Exception as e:
+            default_logger().debug(e, exc_info=True)
             pass
         try:
             data.reset_index(inplace=True)
@@ -1730,7 +1738,7 @@ class PKAssetsManager:
         default_logger().debug(f"Attempted fresh download of {len(stockCodes)} stocks and downloaded {len(processedStocks)} stocks. {len(leftOutStocks)} stocks remaining/ignored.")
         return stockDict, 0
 
-    @track_performance("PKAssetsManager.loadStockData")
+    @track_performance("PKAssetsManager_loadStockData")
     @Halo(text='  [+] Downloading fresh instruments and their data from Data Providers...', spinner='dots')
     def loadStockData(
         stockDict,
@@ -1975,7 +1983,7 @@ class PKAssetsManager:
         # start_backup()
         return stockDict
 
-    @track_performance("PKAssetsManager.loadDataFromLocalPickle")
+    @track_performance("PKAssetsManager_loadDataFromLocalPickle")
     @Halo(text='  [+] Loading data from local cache...', spinner='dots')
     def loadDataFromLocalPickle(stockDict, configManager, downloadOnly, defaultAnswer, exchangeSuffix, cache_file, isTrading, stockCodes=None):
         """
@@ -2173,7 +2181,7 @@ class PKAssetsManager:
         return fileDownloaded
 
     @staticmethod
-    @track_performance("PKAssetsManager.downloadSavedDataFromServer")
+    @track_performance("PKAssetsManager_downloadSavedDataFromServer")
     def downloadSavedDataFromServer(stockDict, configManager, downloadOnly, defaultAnswer, retrial, forceLoad, stockCodes, exchangeSuffix, isIntraday, forceRedownload, cache_file, isTrading):
         """
         Download saved data from PK Screener server as fallback.

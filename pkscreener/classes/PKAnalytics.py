@@ -24,6 +24,8 @@
 
 """
 
+import functools
+import inspect
 import os
 import sys
 import threading
@@ -39,9 +41,10 @@ from PKDevTools.classes.Fetcher import fetcher
 from PKDevTools.classes.Utils import random_user_agent
 from PKDevTools.classes.Singleton import SingletonType, SingletonMixin
 from PKDevTools.classes.pubsub.publisher import PKUserService
+from PKDevTools.classes.pubsub.subscriber import PKNotificationService
 from pkscreener.classes import VERSION
 from pkscreener.classes.ConfigManager import tools, parser
-
+from PKDevTools.classes.log import default_logger
 
 class AnalyticsCategory:
     """Constants for Google Analytics event categories."""
@@ -390,7 +393,8 @@ class PKAnalyticsService(SingletonMixin, metaclass=SingletonType):
         try:
             from pkscreener.classes.PKUserRegistration import PKUserRegistration
             # This just checks if user is logged in (premium trial or paid)
-            return PKUserRegistration().userID != 0
+            return False
+            # return PKUserRegistration().userID != 0
         except Exception:
             return False
 
@@ -598,7 +602,7 @@ def track_feature(feature_name):
         
         # Class method
         @classmethod
-        @track_feature("PKUserRegistration.login")
+        @track_feature("PKUserRegistration_login")
         def login(cls, trialCount=0):
             pass
         
@@ -649,7 +653,7 @@ def track_performance(operation_name):
         
         # Class method
         @classmethod
-        @track_performance("PKUserRegistration.login")
+        @track_performance("PKUserRegistration_login")
         def login(cls, trialCount=0):
             pass
         
@@ -716,7 +720,7 @@ def track_all(operation_name, feature_name=None):
     Works with instance, class, and static methods.
     
     Usage:
-        @track_all("PKUserRegistration.login", "User Login")
+        @track_all("PKUserRegistration_login", "User Login")
         @classmethod
         def login(cls):
             pass
@@ -754,5 +758,122 @@ def track_all(operation_name, feature_name=None):
                     error=str(e)[:100]
                 )
                 raise
+        return wrapper
+    return decorator
+
+def track_event(category, action, label=None, capture_params=None, capture_result=False, log_args=False):
+    """
+    Decorator to automatically send analytics events with function parameters.
+    
+    Args:
+        category (str): Event category (App, User, Scan, Performance, Error, System)
+        action (str): Event action template (can use {function_name} placeholder)
+        label (str, optional): Event label template (can use {param_name} placeholders)
+        capture_params (list, optional): List of parameter names to capture as custom dimensions
+        capture_result (bool): If True, capture return value (as string)
+        log_args (bool): If True, log all arguments for debugging
+        
+    Example:
+        @track_event(
+            category=AnalyticsCategory.SYSTEM,
+            action="workflow_trigger",
+            label="workflow_{workflowType}",
+            capture_params=["workflowType", "repo", "owner", "branch"],
+            capture_result=True
+        )
+        def run_workflow(command=None, user=None, options=None, workflowType="B", 
+                        repo=None, owner=None, branch=None, ghp_token=None, 
+                        workflow_name=None, workflow_postData=None):
+            pass
+    """
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            analytics = PKAnalyticsService()
+            start_time = time.time()
+            
+            # Capture function arguments
+            sig = inspect.signature(func)
+            bound_args = sig.bind_partial(*args, **kwargs)
+            bound_args.apply_defaults()
+            params = bound_args.arguments
+            
+            # Log if requested
+            if log_args:
+                default_logger().debug(f"Tracking {func.__name__} with params: {params}")
+            
+            # Prepare custom dimensions from captured parameters
+            custom_dimensions = {}
+            if capture_params:
+                for param_name in capture_params:
+                    if param_name in params and params[param_name] is not None:
+                        value = params[param_name]
+                        # Truncate long values
+                        if isinstance(value, str) and len(value) > 100:
+                            value = value[:100] + "..."
+                        elif isinstance(value, dict):
+                            value = str(value)[:100]
+                        custom_dimensions[f"param_{param_name}"] = value
+            
+            # Add additional metrics
+            custom_dimensions["function_name"] = func.__name__
+            
+            # Prepare event action with function name if placeholder exists
+            event_action = action
+            if "{function_name}" in action:
+                event_action = action.format(function_name=func.__name__)
+            
+            # Prepare event label with parameter placeholders
+            event_label = label
+            if label and "{" in label:
+                try:
+                    event_label = label.format(**params)
+                except KeyError as e:
+                    default_logger().debug(f"Label formatting failed: {e}")
+                    event_label = label
+            
+            # Execute the actual function
+            result = None
+            success = True
+            error_msg = None
+            
+            try:
+                result = func(*args, **kwargs)
+                if capture_result:
+                    # Capture result summary (not full content)
+                    if isinstance(result, dict):
+                        result_summary = f"dict({len(result)} keys)"
+                    elif isinstance(result, list):
+                        result_summary = f"list({len(result)} items)"
+                    elif isinstance(result, str):
+                        result_summary = result[:100] + ("..." if len(result) > 100 else "")
+                    else:
+                        result_summary = str(type(result).__name__)
+                    custom_dimensions["result_type"] = result_summary
+                return result
+            except Exception as e:
+                success = False
+                error_msg = str(e)[:200]
+                custom_dimensions["error"] = error_msg
+                raise
+            finally:
+                # Calculate execution time
+                duration_ms = int((time.time() - start_time) * 1000)
+                custom_dimensions["duration_ms"] = duration_ms
+                custom_dimensions["success"] = success
+                
+                # Send analytics event
+                analytics.send_event(
+                    category=category,
+                    action=event_action,
+                    label=event_label if event_label else (AnalyticsLabel.SUCCESS if success else AnalyticsLabel.FAILURE),
+                    value=1,
+                    custom_dimensions=custom_dimensions
+                )
+                
+                # Log if debug enabled
+                if log_args:
+                    default_logger().debug(f"Tracked {func.__name__}: success={success}, duration={duration_ms}ms")
+        
         return wrapper
     return decorator

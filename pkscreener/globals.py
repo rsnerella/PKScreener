@@ -3006,7 +3006,11 @@ def printNotifySaveScreenedResults(screenResults, saveResults, selectedChoice, m
         + colorText.END
         , enableMultipleLineOutput=True
     )
-    
+    PKAnalyticsService().send_event(f"{'Bot' if 'RUNNER' in os.environ.keys() else 'User'}_scan_completed", {
+        "scan_type": runOptionName,
+        "result_count": final_count,
+        "duration": round(time.time() - start_time, 2)
+    })
     pngName = f'PKS_{"IA_" if userPassedArgs is not None and userPassedArgs.runintradayanalysis else ""}{runOptionName}_{PKDateUtilities.currentDateTime().strftime("%d-%m-%y_%H.%M.%S")}'
     pngExtension = ".png"
     eligible = is_token_telegram_configured()

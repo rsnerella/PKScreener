@@ -136,7 +136,7 @@ class PKUserRegistration(SingletonMixin, metaclass=SingletonType):
             return False, ValidationResult.BadOTP
 
     @classmethod
-    @track_all("PKUserRegistration.login")
+    @track_all("PKUserRegistration_login")
     def login(self, trialCount=0):
         try:
             PKAnalyticsService().collectMetrics(async_mode=True)

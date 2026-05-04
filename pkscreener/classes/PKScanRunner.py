@@ -41,7 +41,7 @@ from PKDevTools.classes.multiprocessing_logging import LogQueueReader
 from PKDevTools.classes.SuppressOutput import SuppressOutput
 from PKDevTools.classes.FunctionTimeouts import exit_after
 
-from pkscreener.classes.PKAnalytics import track_performance
+from pkscreener.classes.PKAnalytics import AnalyticsCategory, track_event, track_performance
 from pkscreener.classes.StockScreener import StockScreener
 from pkscreener.classes.CandlePatterns import CandlePatterns
 from pkscreener.classes.ConfigManager import parser, tools
@@ -110,7 +110,7 @@ class PKScanRunner:
         return screenResults, saveResults
 
     @staticmethod
-    @track_performance("PKScanRunner.initQueues")
+    @track_performance("PKScanRunner_initQueues")
     def initQueues(minimumCount=0, userPassedArgs=None):
         """
         Initialize multiprocessing queues with optimized consumer count.
@@ -485,7 +485,7 @@ class PKScanRunner:
             worker.refreshDatabase = True
     
     @staticmethod
-    @track_performance("PKScanRunner.runScanWithParams")
+    @track_performance("PKScanRunner_runScanWithParams")
     def runScanWithParams(userPassedArgs, keyboardInterruptEvent, screenCounter, screenResultsCounter,
                           stockDictPrimary, stockDictSecondary, testing, backtestPeriod, menuOption,
                           executeOption, samplingDuration, items, screenResults, saveResults,
@@ -573,7 +573,15 @@ class PKScanRunner:
         return screenResults, saveResults, backtest_df, tasks_queue, results_queue, consumers, logging_queue
 
     @exit_after(180)  # Should not remain stuck starting the multiprocessing clients beyond this time
-    @track_performance("PKScanRunner.prepareToRunScan")
+    @track_performance("PKScanRunner_prepareToRunScan")
+    @track_event(
+        category=AnalyticsCategory.SYSTEM,
+        action="scan_trigger",
+        label="scan_{menuOption}_12_{executeOption}",
+        capture_params=["userPassedArgs", "menuOption", "executeOption"],
+        capture_result=False,
+        log_args=False  # Set to True for debugging, False in production
+    )
     @Halo(text='  [+] Creating multiple processes for faster processing...', spinner='dots')
     def prepareToRunScan(menuOption, keyboardInterruptEvent, screenCounter, screenResultsCounter,
                          stockDictPrimary, stockDictSecondary, items, executeOption, userPassedArgs):
@@ -642,7 +650,7 @@ class PKScanRunner:
         return tasks_queue, results_queue, consumers, logging_queue
 
     @staticmethod
-    @track_performance("PKScanRunner.startWorkersParallel")
+    @track_performance("PKScanRunner_startWorkersParallel")
     def startWorkersParallel(consumers):
         """
         Start all worker processes in parallel across all platforms.
