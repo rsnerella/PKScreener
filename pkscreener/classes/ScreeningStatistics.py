@@ -5002,8 +5002,25 @@ class ScreeningStatistics:
     
     # Preprocess the acquired data
     def preprocessData(self, df, daysToLookback=None):
+        """
+        Preprocess the acquired data by calculating technical indicators and adding them as new columns to the dataframe.
+        The indicators calculated include:
+        - SMA (Simple Moving Average) for 50, 200, 9, and 20 periods
+        - EMA (Exponential Moving Average) for 50, 200, 9, and 20 periods (if useEMA is True in config)
+        - Volatility (20-day rolling standard deviation of close price)
+        - VolMA (20-day rolling mean of volume)
+        - RSI (Relative Strength Index) for 14 periods
+        - CCI (Commodity Channel Index) for 14 periods
+        - STOCHRSI (Stochastic RSI) for 14 periods with fastk_period of 5 and fastd_period of 3
+        The function returns a tuple of (fullData, trimmedData) where fullData is the dataframe with all calculated indicators and trimmedData is the dataframe limited to the specified number of days to look back.
+
+        Args:
+            df (pd.DataFrame): The input dataframe in descending order containing stock data with columns like 'close', 'high', 'low', 'volume', etc.
+            daysToLookback (int, optional): The number of recent days to include in the trimmedData. If None, it defaults to the value specified in the configuration manager.
+        """
         assert isinstance(df, pd.DataFrame)
         data = df.copy()
+        data = data[::-1]  # Reverse the dataframe so that its the oldest date first for technical indicator calculations
         try:
             data = data.replace(np.inf, np.nan).replace(-np.inf, np.nan).dropna(how="all")
             if data.empty:

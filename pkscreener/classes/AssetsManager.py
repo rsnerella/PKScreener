@@ -748,84 +748,97 @@ class PKAssetsManager:
         return new_index, new_rows
 
     @staticmethod
+    def _ensure_timezone_aware(timestamp, default_timezone=None):
+        """
+        Ensure timestamp is timezone-aware, defaulting to IST if naive.
+        
+        Args:
+            timestamp: Can be string, datetime, or pandas Timestamp
+            default_timezone: pytz timezone object (defaults to Asia/Kolkata)
+        
+        Returns:
+            timezone-aware datetime object
+        """
+        from datetime import datetime
+        import pytz
+        import pandas as pd
+        
+        if default_timezone is None:
+            default_timezone = pytz.timezone("Asia/Kolkata")
+        
+        # If it's a pandas Timestamp
+        if hasattr(timestamp, 'tzinfo'):
+            if timestamp.tzinfo is None:
+                # Naive pandas Timestamp - localize to IST
+                return timestamp.tz_localize(default_timezone)
+            else:
+                # Already timezone-aware - convert to IST if needed
+                return timestamp.tz_convert(default_timezone)
+        
+        # If it's a string
+        if isinstance(timestamp, str):
+            # Remove any existing timezone info
+            if '+' in timestamp:
+                timestamp = timestamp.split('+')[0]
+            elif 'Z' in timestamp:
+                timestamp = timestamp.replace('Z', '')
+            elif ' ' in timestamp and len(timestamp) > 19:
+                timestamp = timestamp[:19]
+            
+            # Parse to datetime
+            try:
+                dt = datetime.fromisoformat(timestamp)
+            except:
+                try:
+                    dt = datetime.strptime(timestamp[:19], '%Y-%m-%d %H:%M:%S')
+                except:
+                    dt = datetime.now()
+            
+            # Localize to IST
+            return default_timezone.localize(dt)
+        
+        # If it's a datetime object
+        if isinstance(timestamp, datetime):
+            if timestamp.tzinfo is None:
+                return default_timezone.localize(timestamp)
+            else:
+                return timestamp.astimezone(default_timezone)
+        
+        # If it's a number (Unix timestamp)
+        if isinstance(timestamp, (int, float)):
+            dt = datetime.fromtimestamp(timestamp)
+            return default_timezone.localize(dt)
+        
+        return default_timezone.localize(datetime.now())
+
+    @staticmethod
     def _apply_fresh_ticks_to_data(stockDict, stockCodes=None):
         """
         Apply fresh tick data from PKBrokers to update stale stock data.
-        
-        This method downloads the latest ticks.json from PKBrokers/PKScreener
-        and merges today's OHLCV data into the existing stockDict while
-        preserving the original timestamp format and removing duplicates.
-        
-        IMPORTANT FEATURES:
-        1. Selective updating: Only updates stocks in stockCodes list (if provided)
-        2. Timestamp format preservation: Detects and maintains original format
-        3. Duplicate removal: Keeps only the latest entry per trading day
-        4. Market hours awareness: Uses actual tick times during trading, market close after hours
-        5. Data integrity: Validates OHLCV data before merging
-        
-        Data Flow:
-        1. Download ticks.json from GitHub (multiple source fallback)
-        2. Detect original timestamp format from existing data
-        3. For each tick, create OHLCV row and format timestamp to match original
-        4. Remove existing entries for today's date
-        5. Add new entry with properly formatted timestamp
-        6. Deduplicate all data to ensure one row per day (latest timestamp)
-        
-        Args:
-            stockDict (dict): Dictionary of stock data where each value is a dict with:
-                - 'data': list of OHLCV rows
-                - 'index': list of timestamps matching each row
-                - 'columns': optional list of column names (length 5 or 6)
-            stockCodes (list, optional): List of stock symbols to update.
-                - If None or empty: Update ALL stocks in stockDict
-                - If provided: Only update stocks in this list
-                - Performance: Selective updating is faster for focused scans
-        
-        Returns:
-            dict: Updated stockDict with fresh tick data merged and duplicates removed
-        
-        Notes:
-            - Preserves original timestamp format (ISO, datetime string, Unix timestamp, etc.)
-            - During market hours: Uses actual tick timestamps from PKBrokers
-            - After market hours: Updates timestamps to market close time (15:30)
-            - Handles missing ticks gracefully (updates timestamps only when needed)
-            - Removes duplicate entries for the same date (keeps latest)
-        
-        Examples:
-            >>> # Update all stocks
-            >>> updated = PKAssetsManager._apply_fresh_ticks_to_data(stockDict)
-            >>> 
-            >>> # Update only specific stocks (faster for focused scans)
-            >>> updated = PKAssetsManager._apply_fresh_ticks_to_data(stockDict, stockCodes=['RELIANCE', 'TCS'])
-            >>> 
-            >>> # During market hours with selective updates
-            >>> if PKDateUtilities.isTradingTime():
-            ...     updated = PKAssetsManager._apply_fresh_ticks_to_data(stockDict, stockCodes=watchlist)
-        
-        Raises:
-            No exceptions raised - all errors are logged and handled gracefully
-        
-        Performance Considerations:
-            - Downloads ticks.json once per call (cached by requests)
-            - Selective updating (stockCodes) significantly reduces processing time
-            - O(n) complexity where n = number of requested stocks + number of ticks
+        All timestamps are normalized to timezone-aware IST format.
         """
-
+        import requests
+        import pytz
+        from datetime import datetime
+        from PKDevTools.classes.PKDateUtilities import PKDateUtilities
+        from PKDevTools.classes.log import default_logger
+        from PKDevTools.classes.OutputControls import OutputControls
+        from PKDevTools.classes.ColorText import colorText
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        import threading
+        
         if not stockDict:
-            default_logger().debug("_apply_fresh_ticks_to_data: stockDict is empty, returning")
             return stockDict
 
+        timezone = pytz.timezone("Asia/Kolkata")
+        
         # Determine which stocks to update
         symbols_to_update = list(stockDict.keys())
         if stockCodes and len(stockCodes) > 0:
             symbols_to_update = [s for s in stockCodes if s in stockDict]
             if not symbols_to_update:
-                default_logger().debug(f"_apply_fresh_ticks_to_data: No matching stocks found for {stockCodes[:5]}...")
                 return stockDict
-            default_logger().debug(f"_apply_fresh_ticks_to_data: Applying fresh ticks to {len(symbols_to_update)} selective stocks")
-        else:
-            default_logger().debug(f"_apply_fresh_ticks_to_data: Applying fresh ticks to all {len(symbols_to_update)} stocks")
-
+        
         # --- Download fresh ticks.json ---
         ticks_sources = [
             "https://raw.githubusercontent.com/pkjmesra/PKBrokers/main/pkbrokers/kite/examples/results/Data/ticks.json",
@@ -836,225 +849,164 @@ class PKAssetsManager:
         ticks_data = None
         for url in ticks_sources:
             try:
-                default_logger().debug(f"_apply_fresh_ticks_to_data: Trying to download ticks from {url}")
                 response = requests.get(url, timeout=30)
                 if response.status_code == 200:
                     ticks_data = response.json()
                     if ticks_data and len(ticks_data) > 0:
                         default_logger().info(f"Downloaded {len(ticks_data)} ticks from {url}")
                         break
-                    else:
-                        default_logger().debug(f"_apply_fresh_ticks_to_data: No ticks data from {url}")
-                else:
-                    default_logger().debug(f"_apply_fresh_ticks_to_data: HTTP {response.status_code} from {url}")
             except Exception as e:
-                default_logger().debug(f"Failed to fetch ticks from {url}: {e}")
                 continue
 
         if not ticks_data:
-            default_logger().debug("_apply_fresh_ticks_to_data: No fresh ticks.json available, returning unchanged stockDict")
             return stockDict
 
-        # --- Process each tick and update stockDict ---
-        timezone = pytz.timezone("Asia/Kolkata")
+        # FIRST PASS: Normalize ALL existing timestamps to timezone-aware IST
+        default_logger().debug("Normalizing existing timestamps to timezone-aware IST...")
+        for symbol, stock_data in stockDict.items():
+            if isinstance(stock_data, dict) and 'index' in stock_data:
+                normalized_indices = []
+                for idx in stock_data['index']:
+                    try:
+                        aware_dt = PKAssetsManager._ensure_timezone_aware(idx, timezone)
+                        # Store as ISO string with timezone for consistency
+                        normalized_indices.append(aware_dt.isoformat())
+                    except Exception:
+                        normalized_indices.append(idx)
+                if normalized_indices:
+                    stock_data['index'] = normalized_indices
+        
+        # Pre-process ticks into a dictionary for O(1) lookup
         today_str = datetime.now(timezone).strftime('%Y-%m-%d')
-        default_logger().debug(f"_apply_fresh_ticks_to_data: Today's date: {today_str}")
         
-        updated_count = 0
-        failed_count = 0
-        skipped_count = 0
-        
-        # Log a sample of what ticks we received
-        sample_ticks = list(ticks_data.items())[:5]
-        default_logger().debug(f"_apply_fresh_ticks_to_data: Sample ticks received: {[(k, v.get('trading_symbol', 'N/A')) for k, v in sample_ticks]}")
-        
-        # Track which symbols we actually process
-        processed_symbols = set()
-
+        # Build lookup dictionary: symbol -> tick_data
+        tick_lookup = {}
         for instrument_token, tick_info in ticks_data.items():
             if not isinstance(tick_info, dict):
                 continue
-
             symbol = tick_info.get('trading_symbol', '')
             ohlcv = tick_info.get('ohlcv', {})
-
-            if not symbol or not ohlcv:
-                continue
-            
-            # Skip if not in our update list
-            if symbol not in symbols_to_update:
-                continue
-            
-            processed_symbols.add(symbol)
-            
-            stock_data = stockDict.get(symbol)
-            if not isinstance(stock_data, dict):
-                default_logger().debug(f"_apply_fresh_ticks_to_data: {symbol} - stock_data is not a dict, skipping")
-                continue
-                
-            if 'data' not in stock_data or 'index' not in stock_data:
-                default_logger().debug(f"_apply_fresh_ticks_to_data: {symbol} - missing 'data' or 'index' keys, skipping")
-                continue
-
-            # Extract OHLCV
-            try:
-                open_price = float(ohlcv.get('open', 0))
-                high_price = float(ohlcv.get('high', 0))
-                low_price = float(ohlcv.get('low', 0))
-                close_price = float(ohlcv.get('close', 0))
-                volume = int(ohlcv.get('volume', 0))
-                
-                tick_timestamp = ohlcv.get('timestamp')
-                
-                default_logger().debug(f"_apply_fresh_ticks_to_data: {symbol} - tick: O={open_price}, H={high_price}, L={low_price}, C={close_price}, V={volume}, ts={tick_timestamp}")
-
-                if close_price <= 0:
-                    default_logger().debug(f"_apply_fresh_ticks_to_data: {symbol} - invalid close price {close_price}, skipping")
-                    failed_count += 1
-                    continue
-
-                # Parse the tick's timestamp to a datetime object
-                if tick_timestamp is None:
-                    default_logger().debug(f"_apply_fresh_ticks_to_data: {symbol} - no timestamp in tick, skipping")
-                    continue
-                    
+            if symbol and ohlcv and symbol in symbols_to_update:
                 try:
-                    if isinstance(tick_timestamp, (int, float)):
-                        timestamp_dt = datetime.fromtimestamp(tick_timestamp, tz=timezone)
-                    else:
-                        timestamp_dt = datetime.fromisoformat(str(tick_timestamp).replace('Z', '+00:00'))
-                        if timestamp_dt.tzinfo is None:
-                            timestamp_dt = timezone.localize(timestamp_dt)
-                        timestamp_dt = timestamp_dt.astimezone(timezone)
-                except Exception as e:
-                    default_logger().debug(f"Error parsing timestamp for {symbol}: {e}")
+                    open_price = float(ohlcv.get('open', 0))
+                    high_price = float(ohlcv.get('high', 0))
+                    low_price = float(ohlcv.get('low', 0))
+                    close_price = float(ohlcv.get('close', 0))
+                    volume = int(ohlcv.get('volume', 0))
+                    tick_timestamp = ohlcv.get('timestamp')
+                    
+                    if close_price > 0 and tick_timestamp:
+                        # Parse timestamp and make timezone-aware
+                        if isinstance(tick_timestamp, (int, float)):
+                            timestamp_dt = datetime.fromtimestamp(tick_timestamp, tz=timezone)
+                        else:
+                            timestamp_dt = datetime.fromisoformat(str(tick_timestamp).replace('Z', '+00:00'))
+                            if timestamp_dt.tzinfo is None:
+                                timestamp_dt = timezone.localize(timestamp_dt)
+                            timestamp_dt = timestamp_dt.astimezone(timezone)
+                        
+                        # Store as ISO string with timezone
+                        aware_ts = timestamp_dt.isoformat()
+                        
+                        tick_lookup[symbol] = {
+                            'row': [open_price, high_price, low_price, close_price, volume],
+                            'timestamp': aware_ts,
+                            'date': aware_ts[:10] if len(aware_ts) >= 10 else aware_ts
+                        }
+                except Exception:
                     continue
-
-                # Create today's row
+        
+        if not tick_lookup:
+            return stockDict
+        
+        # Process stocks in parallel
+        updated_count = 0
+        failed_count = 0
+        update_lock = threading.Lock()
+        
+        def process_stock(symbol):
+            """Process a single stock - thread-safe"""
+            stock_data = stockDict.get(symbol)
+            if not isinstance(stock_data, dict) or 'data' not in stock_data or 'index' not in stock_data:
+                return False
+            
+            tick_info = tick_lookup.get(symbol)
+            if not tick_info:
+                return False
+            
+            try:
+                existing_index = stock_data.get('index', [])
+                existing_rows = stock_data.get('data', [])
                 columns = stock_data.get('columns', [])
-                today_row = [open_price, high_price, low_price, close_price, volume]
+                
+                # Build today_row with Adj Close if needed
+                today_row = tick_info['row'].copy()
                 if len(columns) == 6:
-                    today_row.append(close_price)  # Adj Close
-
-                # Force the timestamp to a consistent string format
-                new_timestamp_str = timestamp_dt.strftime('%Y-%m-%d %H:%M:%S')
-                default_logger().debug(f"_apply_fresh_ticks_to_data: {symbol} - formatted timestamp: {new_timestamp_str}")
-
+                    today_row.append(tick_info['row'][4])
+                
+                # Check if today's date exists (using date string comparison)
+                tick_date = tick_info['date']
+                has_today = False
+                
+                # Quick check last few indices
+                check_limit = min(5, len(existing_index))
+                for i in range(-check_limit, 0):
+                    if i >= len(existing_index):
+                        continue
+                    idx_str = str(existing_index[i])
+                    if len(idx_str) >= 10:
+                        idx_date = idx_str[:10]
+                        if idx_date == tick_date:
+                            has_today = True
+                            break
+                
+                if has_today:
+                    # Filter out today's old entries
+                    new_index_list = []
+                    new_rows_list = []
+                    for idx, row in zip(existing_index, existing_rows):
+                        idx_str = str(idx)
+                        idx_date = idx_str[:10] if len(idx_str) >= 10 else idx_str
+                        if idx_date != tick_date:
+                            new_index_list.append(idx)
+                            new_rows_list.append(row)
+                    
+                    new_index_list.append(tick_info['timestamp'])
+                    new_rows_list.append(today_row)
+                else:
+                    # No today data - just append
+                    new_index_list = existing_index + [tick_info['timestamp']]
+                    new_rows_list = existing_rows + [today_row]
+                
+                # Deduplicate to keep latest per date
+                final_index, final_data = PKAssetsManager._deduplicate_by_date_fast_aware(new_index_list, new_rows_list)
+                
+                # Update stock data
+                stock_data['index'] = final_index
+                stock_data['data'] = final_data
+                stockDict[symbol] = stock_data
+                
+                with update_lock:
+                    return True
+                    
             except Exception as e:
-                default_logger().debug(f"Error building row for {symbol}: {e}")
-                failed_count += 1
-                continue
-
-            # --- Update the stock's data ---
-            existing_index = stock_data.get('index', [])
-            existing_rows = stock_data.get('data', [])
+                default_logger().debug(f"Error processing {symbol}: {e}")
+                with update_lock:
+                    return False
+        
+        # Use ThreadPoolExecutor for parallel processing
+        max_workers = min(32, len(tick_lookup) // 10 + 1)
+        
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {executor.submit(process_stock, symbol): symbol for symbol in tick_lookup.keys()}
             
-            default_logger().debug(f"_apply_fresh_ticks_to_data: {symbol} - BEFORE: existing rows={len(existing_index)}, last index={existing_index[-1] if existing_index else 'N/A'}")
-            
-            # Log the dates present in existing data
-            existing_dates = []
-            for idx in existing_index[-10:]:  # Last 10 entries
-                idx_str = str(idx)
-                idx_date = idx_str[:10] if len(idx_str) >= 10 else idx_str
-                existing_dates.append(idx_date)
-            default_logger().debug(f"_apply_fresh_ticks_to_data: {symbol} - existing dates (last 10): {existing_dates}")
-            
-            # Combine existing data (excluding any row from today) with the new tick
-            new_index_list = []
-            new_rows_list = []
-            today_entries_found = 0
-
-            for idx, row in zip(existing_index, existing_rows):
-                idx_str = str(idx)
-                # Extract date part from existing index
-                if 'T' in idx_str:
-                    idx_date = idx_str.split('T')[0]
-                elif ' ' in idx_str:
-                    idx_date = idx_str.split(' ')[0]
+            for future in as_completed(futures):
+                if future.result():
+                    updated_count += 1
                 else:
-                    idx_date = idx_str[:10] if len(idx_str) >= 10 else idx_str
-
-                if idx_date == today_str:
-                    today_entries_found += 1
-                    default_logger().debug(f"_apply_fresh_ticks_to_data: {symbol} - EXCLUDING today's entry with timestamp: {idx}")
-                    # Don't add this to new list - we'll replace with fresh tick
-                else:
-                    new_index_list.append(idx)
-                    new_rows_list.append(row)
-
-            default_logger().debug(f"_apply_fresh_ticks_to_data: {symbol} - found {today_entries_found} existing today entries, excluding them")
-            
-            # Add the new tick's row
-            new_index_list.append(new_timestamp_str)
-            new_rows_list.append(today_row)
-            
-            default_logger().debug(f"_apply_fresh_ticks_to_data: {symbol} - ADDING new tick with timestamp: {new_timestamp_str}")
-            default_logger().debug(f"_apply_fresh_ticks_to_data: {symbol} - BEFORE dedup: new list size={len(new_index_list)}")
-
-            # Deduplicate: Keep the latest row per date
-            final_index, final_data = PKAssetsManager._deduplicate_by_date(new_index_list, new_rows_list)
-            
-            default_logger().debug(f"_apply_fresh_ticks_to_data: {symbol} - AFTER dedup: final size={len(final_index)}")
-            
-            # Log what dates we have after dedup
-            final_dates = []
-            for idx in final_index[-10:]:
-                idx_str = str(idx)
-                idx_date = idx_str[:10] if len(idx_str) >= 10 else idx_str
-                final_dates.append(idx_date)
-            default_logger().debug(f"_apply_fresh_ticks_to_data: {symbol} - final dates (last 10): {final_dates}")
-            
-            # Check if we still have today's date
-            has_today = any(date == today_str for date in final_dates)
-            default_logger().debug(f"_apply_fresh_ticks_to_data: {symbol} - has today's date after update: {has_today}")
-
-            # Update the stock data in the dictionary
-            stock_data['index'] = final_index
-            stock_data['data'] = final_data
-            stockDict[symbol] = stock_data
-            updated_count += 1
-
-        # --- Log summary for all processed symbols ---
-        default_logger().debug("=" * 80)
-        default_logger().debug("_apply_fresh_ticks_to_data: PROCESSING SUMMARY")
-        default_logger().debug(f"  Symbols in ticks.json: {len(ticks_data)}")
-        default_logger().debug(f"  Symbols requested to update: {len(symbols_to_update)}")
-        default_logger().debug(f"  Symbols actually processed from ticks: {len(processed_symbols)}")
-        default_logger().debug(f"  Symbols updated successfully: {updated_count}")
-        default_logger().debug(f"  Symbols failed: {failed_count}")
-        default_logger().debug(f"  Symbols skipped (not in ticks): {len(symbols_to_update) - len(processed_symbols)}")
+                    failed_count += 1
         
-        # Log sample of updated symbols
-        if updated_count > 0:
-            sample_updated = list(processed_symbols)[:5]
-            default_logger().debug(f"  Sample updated symbols: {sample_updated}")
-            
-            # For each sample, log before/after dates
-            for sym in sample_updated:
-                if sym in stockDict:
-                    stock_data = stockDict[sym]
-                    if 'index' in stock_data and stock_data['index']:
-                        last_idx = str(stock_data['index'][-1])[:10]
-                        row_count = len(stock_data.get('data', []))
-                        default_logger().debug(f"    {sym}: last_date={last_idx}, rows={row_count}")
-        
-        default_logger().debug("=" * 80)
-
-        # Also log a sample of stocks that were NOT updated but were in symbols_to_update
-        not_updated = set(symbols_to_update) - processed_symbols
-        if not_updated and len(not_updated) > 0:
-            sample_not_updated = list(not_updated)[:5]
-            default_logger().debug(f"_apply_fresh_ticks_to_data: Sample symbols NOT updated (no tick data): {sample_not_updated}")
-            
-            # For these, check if they had today's date before
-            for sym in sample_not_updated:
-                if sym in stockDict:
-                    stock_data = stockDict[sym]
-                    if 'index' in stock_data and stock_data['index']:
-                        last_idx = str(stock_data['index'][-1])[:10]
-                        default_logger().debug(f"    {sym}: existing last_date={last_idx} (preserved)")
-        
-        # --- Final Logging ---
+        # Final logging
         if updated_count > 0:
             default_logger().info(f"Applied fresh tick data to {updated_count} symbols. Failed: {failed_count}")
             OutputControls().printOutput(
@@ -1063,11 +1015,51 @@ class PKAssetsManager:
                 + (f" ({failed_count} failed)" if failed_count > 0 else "")
                 + colorText.END
             )
-        elif stockCodes and len(stockCodes) > 0:
-            default_logger().debug(f"No fresh ticks available for the requested {len(stockCodes)} stocks")
-
+        
         return stockDict
 
+
+    @staticmethod
+    def _deduplicate_by_date_fast_aware(index_list, data_rows):
+        """
+        Fast deduplication for timezone-aware timestamps.
+        Keeps the latest entry per date (by comparing timestamps).
+        """
+        if len(index_list) <= 1:
+            return index_list, data_rows
+        
+        from datetime import datetime
+        
+        date_to_latest = {}
+        
+        for idx, row in zip(index_list, data_rows):
+            idx_str = str(idx)
+            # Extract date part (first 10 chars for YYYY-MM-DD)
+            idx_date = idx_str[:10] if len(idx_str) >= 10 else idx_str
+            
+            if idx_date in date_to_latest:
+                existing_idx = date_to_latest[idx_date][0]
+                # Compare timestamps (string comparison works with ISO format)
+                if idx_str > str(existing_idx):
+                    date_to_latest[idx_date] = (idx, row)
+            else:
+                date_to_latest[idx_date] = (idx, row)
+        
+        # Unpack results
+        new_index = []
+        new_rows = []
+        for idx, row in date_to_latest.values():
+            new_index.append(idx)
+            new_rows.append(row)
+        
+        # Sort chronologically (oldest first) for consistent data
+        if len(new_index) > 1:
+            sorted_pairs = sorted(zip(new_index, new_rows), key=lambda x: x[0])
+            new_index, new_rows = zip(*sorted_pairs)
+            new_index = list(new_index)
+            new_rows = list(new_rows)
+        
+        return new_index, new_rows
 
     @staticmethod
     def _download_and_validate_pkl(url: str, output_path: str, min_rows_required: int = 100) -> tuple:

@@ -1012,43 +1012,6 @@ class StockScreener:
         fullData = None
         processedData = None
         
-        # Helper function to ensure datetime index with newest-first order
-        def ensure_newest_first(df):
-            """Ensure DataFrame has datetime index sorted newest first."""
-            if df is None or df.empty:
-                return df
-            
-            df_copy = df.copy()
-            
-            # Try to get datetime index
-            if not isinstance(df_copy.index, pd.DatetimeIndex):
-                # Try to convert index to datetime
-                try:
-                    # Check if index is the date column name
-                    if df_copy.index.name and 'date' in df_copy.index.name.lower():
-                        df_copy.index = pd.to_datetime(df_copy.index, errors='coerce')
-                    elif 'Date' in df_copy.columns:
-                        df_copy.set_index('Date', inplace=True)
-                        df_copy.index = pd.to_datetime(df_copy.index, errors='coerce')
-                    else:
-                        # Try to find any date-like column
-                        for col in df_copy.columns:
-                            if 'date' in col.lower() or 'time' in col.lower():
-                                df_copy.set_index(col, inplace=True)
-                                df_copy.index = pd.to_datetime(df_copy.index, errors='coerce')
-                                break
-                except Exception:
-                    pass
-            
-            # Remove rows with NaT index
-            df_copy = df_copy[~df_copy.index.isna()]
-            
-            # Sort newest first (descending)
-            if not df_copy.empty:
-                df_copy = df_copy.sort_index(ascending=False)
-            
-            return df_copy
-        
         ohlc_dict = {
             "open": 'first',
             "high": 'max',
@@ -1061,9 +1024,6 @@ class StockScreener:
         candleDuration = self.configManager.candleDurationInt
         candleDurationFrequency = self.configManager.candleDurationFrequency
         durationFrequency = "T" if candleDurationFrequency == "m" else ("H" if candleDurationFrequency == "h" else ("M" if candleDurationFrequency == "mo" else ("W" if candleDurationFrequency == "wk" else "T")))
-        
-        # Ensure input data is newest-first before resampling
-        data = ensure_newest_first(data)
         
         if int(candleDuration) >= 1 and (candleDurationFrequency in ["m", "h", "mo", "wk"]):
             data = data.resample(f'{candleDuration}{durationFrequency}', offset='15min').agg(ohlc_dict)
@@ -1105,20 +1065,7 @@ class StockScreener:
                     inputData, daysToLookback=configManager.daysToLookback
                 )
                 
-                # Ensure processed data is newest-first
-                if fullData is not None and not fullData.empty:
-                    fullData = ensure_newest_first(fullData)
-                if processedData is not None and not processedData.empty:
-                    processedData = ensure_newest_first(processedData)
-                
                 data = data_descending
-        
-        # Final assurance that all returns are newest-first
-        data = ensure_newest_first(data)
-        if fullData is not None:
-            fullData = ensure_newest_first(fullData)
-        if processedData is not None:
-            processedData = ensure_newest_first(processedData)
         
         return fullData, processedData, data
 
@@ -1280,12 +1227,12 @@ class StockScreener:
                 index_data = hostData["index"]
                 
                 # Parse index to datetime with robust format handling
-                parsed_index = []
-                for idx in index_data:
-                    parsed_idx = parse_mixed_date(idx)
-                    parsed_index.append(parsed_idx)
+                # parsed_index = []
+                # for idx in index_data:
+                #     parsed_idx = parse_mixed_date(idx)
+                #     parsed_index.append(parsed_idx)
                 
-                data = pd.DataFrame(hostData["data"], columns=columns, index=parsed_index)
+                data = pd.DataFrame(hostData["data"], columns=columns, index=index_data)
                 
             except (ValueError, AssertionError) as e:
                 excLookingFor = " columns passed, passed data had "
@@ -1313,17 +1260,17 @@ class StockScreener:
                 
                 # If Date is a column, parse and set as index
                 if 'Date' in data.columns:
-                    data['Date'] = data['Date'].apply(parse_mixed_date)
+                    # data['Date'] = data['Date'].apply(parse_mixed_date)
                     data.set_index("Date", inplace=True)
                 
                 # CRITICAL: Ensure newest-first order
-                data = ensure_newest_first(data)
+                # data = ensure_newest_first(data)
                 
-                # Log date range for debugging (only for first few stocks to avoid spam)
-                if hasattr(hostRef, '_data_date_logged_count'):
-                    hostRef._data_date_logged_count = getattr(hostRef, '_data_date_logged_count', 0) + 1
-                else:
-                    hostRef._data_date_logged_count = 1
+                # # Log date range for debugging (only for first few stocks to avoid spam)
+                # if hasattr(hostRef, '_data_date_logged_count'):
+                #     hostRef._data_date_logged_count = getattr(hostRef, '_data_date_logged_count', 0) + 1
+                # else:
+                #     hostRef._data_date_logged_count = 1
                 
                 # if hostRef._data_date_logged_count <= 3 and not data.empty:
                 #     latest_date = data.index[0]
@@ -1333,11 +1280,11 @@ class StockScreener:
             except Exception as e:
                 hostRef.default_logger.debug(f"Error parsing date index: {e}", exc_info=True)
                 # Fallback: try to sort if possible
-                if data is not None and not data.empty:
-                    try:
-                        data = ensure_newest_first(data)
-                    except Exception:
-                        pass
+                # if data is not None and not data.empty:
+                #     try:
+                #         data = ensure_newest_first(data)
+                #     except Exception:
+                #         pass
         
         # Cache the data if needed
         if ((shouldCache and not self.isTradingTime and (hostData is None or hostDataLength == 0)) or downloadOnly) or (shouldCache and hostData is None):
