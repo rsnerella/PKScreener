@@ -541,7 +541,8 @@ class PKAnalyticsService(SingletonMixin, metaclass=SingletonType):
                 label=AnalyticsLabel.INFO,
                 custom_dimensions={
                     "user_exists": bool(user),
-                    "premium": self._is_premium_user()
+                    "premium": self._is_premium_user(),
+                    "tel_user_id": f"{user}({self.username})" if user else self.username,
                 }
             )
         except Exception:

@@ -296,9 +296,9 @@ class ScreeningStatistics:
                 pass
         
         # Log results
-        new_sells = df["Sell"].sum() - original_sell_count
-        if new_sells > 0 and self.default_logger:
-            self.default_logger.debug(f"Added {new_sells} bearish sell signals")
+        # new_sells = df["Sell"].sum() - original_sell_count
+        # if new_sells > 0 and self.default_logger:
+        #     self.default_logger.debug(f"Added {new_sells} bearish sell signals")
         
         return df
 
@@ -6626,8 +6626,8 @@ class ScreeningStatistics:
                         rvm_score = 0
                         
                 except Exception as rvm_e:
-                    if stockName and self.default_logger:
-                        self.default_logger.debug(f"RVM calculation failed for {stockName}: {rvm_e}")
+                    # if stockName and self.default_logger:
+                    #     self.default_logger.debug(f"RVM calculation failed for {stockName}: {rvm_e}")
                     # Don't fail VCP due to RVM calculation errors - just set to 0
                     rvm_value = 0
                     rvm_score = 0

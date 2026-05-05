@@ -1735,7 +1735,7 @@ class PKAssetsManager:
                             processedStocks.append(stock)
         """
         leftOutStocks = list(set(stockCodes)-set(processedStocks))
-        default_logger().debug(f"Attempted fresh download of {len(stockCodes)} stocks and downloaded {len(processedStocks)} stocks. {len(leftOutStocks)} stocks remaining/ignored.")
+        # default_logger().debug(f"Attempted fresh download of {len(stockCodes)} stocks and downloaded {len(processedStocks)} stocks. {len(leftOutStocks)} stocks remaining/ignored.")
         return stockDict, 0
 
     @track_performance("PKAssetsManager_loadStockData")
@@ -2084,7 +2084,7 @@ class PKAssetsManager:
             # During trading hours: use current time for latest timestamps
             # After market hours: update today's data to market close time (15:30) if it has early morning timestamps
             # After loading stockData, before applying fresh ticks
-            if stockDict and len(stockDict) > 0 and isTrading:
+            if stockDict and len(stockDict) > 0:
                 # Log sample of current data dates BEFORE applying ticks
                 default_logger().debug("=" * 60)
                 default_logger().debug("BEFORE applying fresh ticks - Sample stock dates:")
@@ -2288,25 +2288,9 @@ class PKAssetsManager:
                         stockDataLoaded = True
                         
                         # Validate data freshness after server download
-                        if stockDict and len(stockDict) > 0 and isTrading:
+                        if stockDict and len(stockDict) > 0:
                             # Pass stockCodes for selective tick updates
                             stockDict = PKAssetsManager._apply_fresh_ticks_to_data(stockDict, stockCodes=stockCodes)
-                        # if isTrading:
-                        #     fresh_count, stale_count, oldest_date = PKAssetsManager.validate_data_freshness(
-                        #         stockDict, isTrading=isTrading
-                        #     )
-                        #     if stale_count > 0:
-                        #         default_logger().warning(
-                        #             f"[DATA-FRESHNESS] Server data has {stale_count} stale stocks. "
-                        #             f"Oldest: {oldest_date}. Fresh ticks recommended."
-                        #         )
-                        #         # Trigger history download workflow if data is stale
-                        #         is_fresh, missing_days = PKAssetsManager.ensure_data_freshness(
-                        #             stockDict, trigger_download=True
-                        #         )
-                        #         if not is_fresh and missing_days > 0:
-                        #             # Try to apply fresh tick data while history download is in progress
-                        #             stockDict = PKAssetsManager._apply_fresh_ticks_to_data(stockDict, stockCodes=stockCodes)
                         # Remove the progress bar now!
                         OutputControls().moveCursorUpLines(1)
                 except KeyboardInterrupt: # pragma: no cover

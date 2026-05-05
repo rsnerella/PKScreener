@@ -139,15 +139,15 @@ class PKUserRegistration(SingletonMixin, metaclass=SingletonType):
     @track_all("PKUserRegistration_login")
     def login(self, trialCount=0):
         try:
-            PKAnalyticsService().collectMetrics(async_mode=True)
+            configManager = tools()
+            configManager.getConfig(parser)
+            PKAnalyticsService().collectMetrics(user=configManager.userID if configManager.userID is not None and len(configManager.userID) > 0 else None, async_mode=True)
             if "RUNNER" in os.environ.keys():
                 return ValidationResult.Success
         except Exception as e: # pragma: no cover
             PKAnalyticsService().track_error(error_type="UserLoginError", error_message=str(e), context="PKUserRegistration.login:ValidationResult.BadUserID")
             return ValidationResult.BadUserID
         ConsoleUtility.PKConsoleTools.clearScreen(userArgs=None, clearAlways=True, forceTop=True)
-        configManager = tools()
-        configManager.getConfig(parser)
         if configManager.userID is not None and len(configManager.userID) > 0:
             PKUserRegistration.populateSavedUserCreds()
             if PKUserRegistration.validateToken()[0]:

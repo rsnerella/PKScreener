@@ -59,5 +59,5 @@ class PKDataService():
                         stockDictList.append(taskResult.get("info"))
                         processedStocks.append(task.userData)
         leftOutStocks = list(set(stockCodes)-set(processedStocks))
-        default_logger().debug(f"Attempted fresh download of {len(stockCodes)} stocks and downloaded {len(processedStocks)} stocks. {len(leftOutStocks)} stocks remaining.")
+        # default_logger().debug(f"Attempted fresh download of {len(stockCodes)} stocks and downloaded {len(processedStocks)} stocks. {len(leftOutStocks)} stocks remaining.")
         return stockDictList, leftOutStocks
