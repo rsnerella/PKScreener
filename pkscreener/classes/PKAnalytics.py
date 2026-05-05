@@ -51,13 +51,13 @@ class AnalyticsCategory:
     APP = "App"
     USER = "User"
     SCAN = "Scan"
-    SCREENING = "Screening"
-    PERFORMANCE = "Performance"
-    ERROR = "Error"
-    FEATURE = "Feature"
-    SUBSCRIPTION = "Subscription"
+    SCREENING = "Scr"
+    PERFORMANCE = "Perf"
+    ERROR = "Err"
+    FEATURE = "Feat"
+    SUBSCRIPTION = "Sub"
     DATA = "Data"
-    SYSTEM = "System"
+    SYSTEM = "Sys"
 
 
 class AnalyticsAction:
@@ -290,12 +290,29 @@ class PKAnalyticsService(SingletonMixin, metaclass=SingletonType):
         if label is None:
             label = AnalyticsLabel.INFO
         
+        # Build custom dimensions - ensure they are flat
+        flat_dimensions = {}
+        if custom_dimensions:
+            for key, val in custom_dimensions.items():
+                # Flatten any nested structures
+                if isinstance(val, dict):
+                    for sub_key, sub_val in val.items():
+                        flat_key = f"{key}_{sub_key}"
+                        flat_dimensions[flat_key] = sub_val
+                elif isinstance(val, list):
+                    flat_dimensions[key] = str(val)[:100]  # Convert list to string
+                else:
+                    flat_dimensions[key] = val
+        
+        # Log the flattened dimensions
+        if flat_dimensions:
+            default_logger().debug(f"Tracking event: {category}_{action} with dimensions: {flat_dimensions}")
         event_data = {
             "category": category,
             "action": action,
             "label": label,
             "value": value,
-            "custom_dimensions": custom_dimensions or {}
+            "custom_dimensions": flat_dimensions or {}
         }
         
         if async_mode:
@@ -378,11 +395,21 @@ class PKAnalyticsService(SingletonMixin, metaclass=SingletonType):
                     pass
             
             # Send the event
-            PKUserService().send_event(f"{category}_{action}", event_params)
-            
+            updated_action = action
+            if isinstance(action, dict):
+                # Handle legacy dict style
+                event_params.update(action)
+                for  key in action.keys():
+                    if isinstance(action[key], str) :
+                        updated_action = action[key]
+                        break
+            if isinstance(updated_action, dict):
+                PKUserService().send_event(f"{category}", event_params)
+            else:
+                PKUserService().send_event(f"{category}_{updated_action}", event_params)
             # Update feature usage counters
             if category == AnalyticsCategory.FEATURE:
-                feature_name = label or action
+                feature_name = label or updated_action
                 self._feature_usage[feature_name] = self._feature_usage.get(feature_name, 0) + 1
                 
         except Exception:

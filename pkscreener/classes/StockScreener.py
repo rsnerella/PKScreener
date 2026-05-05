@@ -1325,10 +1325,10 @@ class StockScreener:
                 else:
                     hostRef._data_date_logged_count = 1
                 
-                if hostRef._data_date_logged_count <= 3 and not data.empty:
-                    latest_date = data.index[0]
-                    oldest_date = data.index[-1]
-                    hostRef.default_logger.info(f"Data date range for {stock}: {oldest_date} to {latest_date} ({len(data)} rows) - NEWEST FIRST")
+                # if hostRef._data_date_logged_count <= 3 and not data.empty:
+                #     latest_date = data.index[0]
+                #     oldest_date = data.index[-1]
+                #     hostRef.default_logger.info(f"Data date range for {stock}: {oldest_date} to {latest_date} ({len(data)} rows) - NEWEST FIRST")
                     
             except Exception as e:
                 hostRef.default_logger.debug(f"Error parsing date index: {e}", exc_info=True)

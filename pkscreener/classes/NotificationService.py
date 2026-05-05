@@ -491,8 +491,8 @@ def send_message_to_telegram_channel_impl(
                     file_paths=file_paths,
                     file_captions=file_captions
                 )
-                if resp is not None:
-                    default_logger().debug(resp.text, exc_info=True)
+                # if resp is not None:
+                #     default_logger().debug(resp.text, exc_info=True)
             
             caption = f"{len(file_captions)} files sent!"
             message = media_group_dict.get("CAPTION", "-").replace('&', 'n').replace("<", "*")[:1024]

@@ -534,7 +534,7 @@ class PKScanRunner:
                         log_queue_reader = LogQueueReader(logging_queue)
                         log_queue_reader.daemon = True
                         log_queue_reader.start()
-                        default_logger().info("LogQueueReader started successfully")
+                        default_logger().debug("LogQueueReader started successfully")
                     else:
                         default_logger().warning("logging_queue is None, log reader not started")
                 except Exception as e:

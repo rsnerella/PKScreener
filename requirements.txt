@@ -57,7 +57,7 @@ pefile>=2023.2.7,<2024.8.26
 Pillow>=9.5.0
 
 # PKScreener ecosystem packages
-PKDevTools>=0.13.20260504.337
+PKDevTools>=0.13.20260505.338
 PKNSETools>=0.1.20260430.151
 PKBrokers>=0.1.20260313.67
 
