@@ -1291,11 +1291,12 @@ def pkscreenercli():
         try:
             multiprocessing.set_start_method("fork")
         except RuntimeError as e:
-            if "RUNNER" not in os.environ.keys() and ('PKDevTools_Default_Log_Level' in os.environ.keys() and
-                                                      os.environ["PKDevTools_Default_Log_Level"] != str(log.logging.NOTSET)):
-                OutputControls().printOutput("  [+] RuntimeError with 'multiprocessing'.\n  [+] Please contact the Developer!")
-                OutputControls().printOutput(e)
-                traceback.print_exc()
+            # if "RUNNER" not in os.environ.keys() and ('PKDevTools_Default_Log_Level' in os.environ.keys() and
+            #                                           os.environ["PKDevTools_Default_Log_Level"] != str(log.logging.NOTSET)):
+            #     OutputControls().printOutput("  [+] RuntimeError with 'multiprocessing'.\n  [+] Please contact the Developer!")
+            #     OutputControls().printOutput(e)
+            #     traceback.print_exc()
+            pass
     
     try:
         debug_config_path = os.path.join(Archiver.get_user_data_dir(), "debug_config.ini")

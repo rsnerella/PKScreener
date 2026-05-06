@@ -71,7 +71,7 @@ class ApplicationState:
         strategyFilter = []
         test_messages_queue = []
         
-        describeUser()
+        # describeUser()
 
 
 class MenuHandler:

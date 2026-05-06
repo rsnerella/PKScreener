@@ -44,6 +44,7 @@ class ValidationResult(Enum):
     BadUserID = 1
     BadOTP = 2
     Trial = 3
+    UserDoesNotExist = 4
 
 class PKUserRegistration(SingletonMixin, metaclass=SingletonType):
     def __init__(self):
@@ -106,7 +107,10 @@ class PKUserRegistration(SingletonMixin, metaclass=SingletonType):
             PKPikey.removeSavedFile(f"{PKUserRegistration().userID}")
             resp = Utility.tools.tryFetchFromServer(cache_file=f"{PKUserRegistration().userID}.pdf",directory="results/Data",hideOutput=False, branchName="SubData", no_cache=True)
             if resp is None or resp.status_code != 200:
-                PKAnalyticsService().track_error(error_type="validateTokenError", error_message="Invalid Response", context="PKUserRegistration.validateToken:ValidationResult.BadUserID")
+                PKAnalyticsService().track_error(error_type="validateTokenError", error_message=f"Invalid Response for user {PKUserRegistration().userID}, status: {resp.status_code if resp else 'None'}", context="PKUserRegistration.validateToken:ValidationResult.BadUserID")
+                if resp is not None and resp.status_code == 404:
+                    PKUserRegistration.resetSavedUserCreds()
+                    return False, ValidationResult.UserDoesNotExist
                 if retrialCount <= 3:
                     sleep(2)
                     return PKUserRegistration.validateToken(retrialCount=retrialCount+1)
@@ -115,7 +119,7 @@ class PKUserRegistration(SingletonMixin, metaclass=SingletonType):
             with open(os.path.join(Archiver.get_user_data_dir(),f"{PKUserRegistration().userID}.pdf"),"wb",) as f:
                 f.write(resp.content)
             if not PKPikey.openFile(f"{PKUserRegistration().userID}.pdf",PKUserRegistration().otp):
-                PKAnalyticsService().track_error(error_type="validateTokenError", error_message="Invalid OTP", context=f"PKUserRegistration.validateToken:ValidationResult.BadOTP:{PKUserRegistration().userID}")
+                PKAnalyticsService().track_error(error_type="validateTokenError", error_message=f"Invalid OTP for user {PKUserRegistration().userID}", context=f"PKUserRegistration.validateToken:ValidationResult.BadOTP:{PKUserRegistration().userID}")
                 if retrialCount <= 3:
                     sleep(2)
                     return PKUserRegistration.validateToken(retrialCount=retrialCount+1)
@@ -210,6 +214,10 @@ class PKUserRegistration(SingletonMixin, metaclass=SingletonType):
                     # delay before it is marked as failed.
                     sleep(10)
                 validationResult,validationReason = PKUserRegistration.validateToken()
+                if not validationResult and validationReason == ValidationResult.userDoesNotExist:
+                    OutputControls().printOutput(f"{colorText.FAIL}[+] Server busy!{colorText.END}\n{colorText.WARN}[+] Maybe try entering the {colorText.END}{colorText.GREEN}UserID{colorText.END} and {colorText.GREEN}OTP{colorText.END} after a few seconds!\n[+] {colorText.WARN}If you have purchased a subscription and are still not able to login, please reach out to {colorText.END}{colorText.GREEN}@ItsOnlyPK{colorText.END} {colorText.WARN}on Telegram!{colorText.END}\n[+] {colorText.FAIL}Please try again or press Ctrl+C to exit!{colorText.END}")
+                    sleep(5)
+                    return PKUserRegistration.login(trialCount=trialCount+1)
                 if not validationResult and validationReason == ValidationResult.BadUserID:
                     PKUserRegistration.resetSavedUserCreds()
                     OutputControls().printOutput(f"{colorText.FAIL}[+] Invalid userID!{colorText.END}\n{colorText.WARN}[+] Maybe try entering the {colorText.END}{colorText.GREEN}UserID{colorText.END}{colorText.WARN} instead of username?{colorText.END}\n[+] {colorText.WARN}If you have purchased a subscription and are still not able to login, please reach out to {colorText.END}{colorText.GREEN}@ItsOnlyPK{colorText.END} {colorText.WARN}on Telegram!{colorText.END}\n[+] {colorText.FAIL}Please try again or press Ctrl+C to exit!{colorText.END}")

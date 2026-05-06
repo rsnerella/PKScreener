@@ -1054,6 +1054,7 @@ class PKScreenerMain:
             mp_dict: Multiprocessing dictionary
             keyboardevent: Keyboard interrupt event
         """
+        return
         if not 'pytest' in sys.modules:
             from PKDevTools.classes.NSEMarketStatus import NSEMarketStatus
             NSEMarketStatus(mp_dict, keyboardevent).startMarketMonitor()

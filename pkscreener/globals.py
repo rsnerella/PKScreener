@@ -237,6 +237,7 @@ def startMarketMonitor(mp_dict, keyboardevent):
     Returns:
         None
     """
+    return
     if not 'pytest' in sys.modules:
         from PKDevTools.classes.NSEMarketStatus import NSEMarketStatus
         NSEMarketStatus(mp_dict,keyboardevent).startMarketMonitor()
@@ -1017,7 +1018,7 @@ def main(userArgs=None, optionalFinalOutcome_df=None):
     options = []
     strategyFilter=[]
     test_messages_queue = []
-    describeUser()
+    # describeUser()
     if keyboardInterruptEventFired:
         return None, None
     
@@ -1034,9 +1035,9 @@ def main(userArgs=None, optionalFinalOutcome_df=None):
         
     if keyboardInterruptEvent is None and not keyboardInterruptEventFired:
         keyboardInterruptEvent = mp_manager.Event()
-        mkt_monitor_dict = mp_manager.dict()
-        # Let's start monitoring the market monitor
-        startMarketMonitor(mkt_monitor_dict,keyboardInterruptEvent)
+    #     mkt_monitor_dict = mp_manager.dict()
+    #     # Let's start monitoring the market monitor
+    #     startMarketMonitor(mkt_monitor_dict,keyboardInterruptEvent)
         
     keyboardInterruptEventFired = False
     if stockDictPrimary is None or isinstance(stockDictPrimary,dict):
@@ -2219,20 +2220,11 @@ def describeUser():
     Returns:
         None
     """
+    return # Disable analytics for now
     if not configManager.enableUsageAnalytics:
         return
     service = PKAnalyticsService()
-    func_args = None
-    task = PKTask("Usage Analytics",
-                    long_running_fn=service.collectMetrics,
-                    long_running_fn_args=func_args)
-    task.total = 1
-    try:
-        # On Github CI, we may run out of memory because of saving results in
-        # shared multiprocessing dict.
-        PKScheduler.scheduleTasks([task],"Starting up...", showProgressBars=False,submitTaskAsArgs=False,timeout=600)
-    except Exception as e: # pragma: no cover
-        pass
+    service.collectMetrics(user=configManager.userid)
 
 @Halo(text='', spinner='dots')
 def prepareGroupedXRay(backtestPeriod, backtest_df):
