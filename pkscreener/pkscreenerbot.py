@@ -1328,8 +1328,9 @@ def scheduled_workflow_trigger():
     Background thread that triggers the production scans workflow at scheduled times.
     
     Runs with optimized polling intervals:
-    - Every 10 minutes until 9:30 AM IST
-    - Every 1 minute from 9:30 AM to 9:40 AM IST
+    - Every 10 minutes until ALERT_PRE_MINUTE (9:30 AM)
+    - Every 30 seconds from ALERT_PRE_MINUTE to ALERT_MINUTE (9:30
+    - Every 1 minute from ALERT_MINUTE to 10:00 AM
     - Stops immediately after triggering the workflow
     """
     global _trigger_stop_event
@@ -1337,9 +1338,8 @@ def scheduled_workflow_trigger():
     ist_tz = pytz.timezone('Asia/Kolkata')
     last_trigger_date = None
     ALERT_HOUR = 9
-    ALERT_PRE_MINUTE = 30
+    ALERT_PRE_MINUTE = 20
     ALERT_MINUTE = 33
-    target_time = dt_time(ALERT_HOUR, ALERT_MINUTE, 0)
     
     logger.info("🕐 Started scheduled workflow trigger thread")
     
@@ -1352,61 +1352,54 @@ def scheduled_workflow_trigger():
             
             # Check if we've already triggered today
             if last_trigger_date == now.date():
-                # Already triggered today, check if we should stop
-                if _trigger_stop_event.is_set():
-                    break
-                # Sleep for an hour before checking again (no need to check frequently)
                 sleep(3600)
                 continue
             
-            # Determine sleep interval based on time
-            if current_hour < ALERT_HOUR or (current_hour == ALERT_HOUR and current_minute < ALERT_PRE_MINUTE):
-                # Before 9:30 AM - check every 10 minutes
-                sleep_interval = 600  # 10 minutes
-                logger.debug(f"Before {ALERT_HOUR}:{ALERT_PRE_MINUTE} - checking every 10 minutes. Current time: {current_time}")
-            elif current_hour == ALERT_HOUR and current_minute < ALERT_MINUTE:
-                # Between 9:30 AM and 9:40 AM - check every 1 minute
-                sleep_interval = 60  # 1 minute
-                logger.debug(f"Approaching {ALERT_HOUR}:{ALERT_MINUTE} - checking every minute. Current time: {current_time}")
-            else:
-                # After 9:40 AM - check every hour (already passed for today)
-                sleep_interval = 3600  # 1 hour
-                logger.debug(f"After {ALERT_HOUR}:{ALERT_MINUTE} - checking hourly. Current time: {current_time}")
-            
-            # Check if it's exactly 9:40 AM (within the same minute)
-            if (current_hour == target_time.hour and 
-                current_minute == target_time.minute):
-                
+            # FIRST: Check if it's time to trigger (before calculating sleep)
+            if current_hour == ALERT_HOUR and current_minute == ALERT_MINUTE:
                 logger.info(f"🕐 It's {ALERT_HOUR}:{ALERT_MINUTE} AM IST on {now.date()} - triggering production scans workflow")
                 
-                # Trigger the workflow
                 success = trigger_prod_scans_workflow()
                 
                 if success:
-                    # Mark as triggered for today
                     last_trigger_date = now.date()
-                    
-                    # Stop the trigger thread immediately after successful trigger
                     logger.info("✅ Workflow triggered successfully. Stopping trigger thread.")
                     _trigger_stop_event.set()
                     break
                 else:
                     logger.warning("⚠️ Workflow trigger failed. Will retry next minute.")
-                    # Don't mark as triggered, will retry next minute
-                    sleep_interval = 60  # Keep checking every minute on failure
+                    sleep(60)
+                    continue
             
-            # Sleep for the determined interval, but check stop event periodically
-            for _ in range(sleep_interval // 10):
+            # SECOND: Determine sleep interval based on time
+            if current_hour < ALERT_HOUR or (current_hour == ALERT_HOUR and current_minute <= ALERT_PRE_MINUTE):
+                # Before ALERT_HOUR:ALERT_PRE_MINUTE AM IST - check every 10 minutes
+                sleep_interval = 600
+                logger.debug(f"Before {ALERT_HOUR}:{ALERT_PRE_MINUTE} AM IST - checking every 10 minutes. Current time: {current_time}")
+            elif current_hour == ALERT_HOUR and current_minute < ALERT_MINUTE:
+                # Between ALERT_HOUR:ALERT_PRE_MINUTE AM and ALERT_HOUR:ALERT_MINUTE AM IST - check every 30 seconds
+                sleep_interval = 30
+                logger.debug(f"Approaching {ALERT_HOUR}:{ALERT_MINUTE} AM IST - checking every 30 seconds. Current time: {current_time}")
+            else:
+                # After ALERT_HOUR:ALERT_MINUTE AM IST - check every hour
+                sleep_interval = 3600
+                logger.debug(f"After {ALERT_HOUR}:{ALERT_MINUTE} AM IST - checking hourly. Current time: {current_time}")
+            
+            # Sleep in small chunks
+            chunk_size = min(10, sleep_interval)
+            for _ in range(sleep_interval // chunk_size):
                 if _trigger_stop_event.is_set():
                     break
-                sleep(10)
+                sleep(chunk_size)
+            remainder = sleep_interval % chunk_size
+            if remainder > 0 and not _trigger_stop_event.is_set():
+                sleep(remainder)
                 
         except Exception as e:
             logger.error(f"Error in scheduled workflow trigger: {e}")
-            sleep(60)  # Sleep for a minute on error
+            sleep(30)
     
     logger.info("🛑 Scheduled workflow trigger thread stopped")
-
 
 def start_scheduled_workflow():
     """Start the background thread for daily workflow trigger."""
@@ -1428,7 +1421,6 @@ def stop_scheduled_workflow():
     
     if _trigger_stop_event is not None:
         _trigger_stop_event.set()
-        _trigger_stop_event = None
     
     if _trigger_thread is not None and _trigger_thread.is_alive():
         _trigger_thread.join(timeout=5)
