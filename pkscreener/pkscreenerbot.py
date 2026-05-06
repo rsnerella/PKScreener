@@ -1640,6 +1640,7 @@ def Level2(update: Update, context: CallbackContext) -> str:
     """
     keyboardRows = []
     index = 0
+    menuText = ""
     while index <= 10:
         keyboardRows.append([])
         index += 1

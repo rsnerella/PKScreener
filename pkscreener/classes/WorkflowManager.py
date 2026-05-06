@@ -37,7 +37,7 @@ configManager = ConfigManager.tools()
     category=AnalyticsCategory.SYSTEM,
     action="workflow_trigger",
     label="workflow_{options}",
-    capture_params=["workflowType", "repo", "owner", "branch", "workflow_name"],
+    capture_params=["workflowType", "repo", "owner", "branch", "workflow_name", "user", "command", "options"],
     capture_result=False,
     log_args=False  # Set to True for debugging, False in production
 )
