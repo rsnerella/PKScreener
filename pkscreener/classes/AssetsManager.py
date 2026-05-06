@@ -34,13 +34,20 @@ import pytz
 import time
 import numpy as np
 from halo import Halo
-from alive_progress import alive_bar
+import alive_progress
 from datetime import datetime, timedelta
+
+
+def alive_bar(*args, **kwargs):
+    return alive_progress.alive_bar(*args, **kwargs)
 # from yfinance import shared
 
-from PKDevTools.classes.log import default_logger
-from PKDevTools.classes import Archiver
+from PKDevTools.classes import Archiver, log
 from PKDevTools.classes.PKDateUtilities import PKDateUtilities
+
+
+def default_logger():
+    return log.default_logger()
 from PKDevTools.classes.OutputControls import OutputControls
 from PKDevTools.classes.ColorText import colorText
 from PKDevTools.classes.MarketHours import MarketHours
@@ -895,9 +902,11 @@ class PKAssetsManager:
                     volume = int(ohlcv.get('volume', 0))
                     tick_timestamp = ohlcv.get('timestamp')
                     
-                    if close_price > 0 and tick_timestamp:
-                        # Parse timestamp and make timezone-aware
-                        if isinstance(tick_timestamp, (int, float)):
+                    if close_price > 0:
+                        # If the tick payload doesn't include an explicit timestamp, use current time.
+                        if not tick_timestamp:
+                            timestamp_dt = datetime.now(timezone)
+                        elif isinstance(tick_timestamp, (int, float)):
                             timestamp_dt = datetime.fromtimestamp(tick_timestamp, tz=timezone)
                         else:
                             timestamp_dt = datetime.fromisoformat(str(tick_timestamp).replace('Z', '+00:00'))
@@ -1471,7 +1480,7 @@ class PKAssetsManager:
                     response = "Y"
             else:
                 response = defaultAnswer
-        except ValueError as e:  # pragma: no cover
+        except Exception as e:  # pragma: no cover
             default_logger().debug(e, exc_info=True)
             response = "Y"
         if response is not None and str(response).upper() != "N":
@@ -1726,9 +1735,9 @@ class PKAssetsManager:
                             stockDict[stock] = taskResult.to_dict("split")
                             processedStocks.append(stock)
         """
-        leftOutStocks = list(set(stockCodes)-set(processedStocks))
+        leftOutStocks = list(set(stockCodes) - set(processedStocks)) if stockCodes else []
         # default_logger().debug(f"Attempted fresh download of {len(stockCodes)} stocks and downloaded {len(processedStocks)} stocks. {len(leftOutStocks)} stocks remaining/ignored.")
-        return stockDict, 0
+        return stockDict, leftOutStocks
 
     @track_performance("PKAssetsManager_loadStockData")
     @Halo(text='  [+] Downloading fresh instruments and their data from Data Providers...', spinner='dots')
@@ -1837,6 +1846,8 @@ class PKAssetsManager:
         
         if downloadOnly or isTrading:
             # We don't want to download from local stale pkl file or stale file at server
+            if downloadOnly and stockDict:
+                PKAssetsManager.saveStockData(stockDict, configManager, initialLoadCount, isIntraday, downloadOnly, forceSave=True)
             # start_backup()
             return stockDict
         
@@ -1902,10 +1913,15 @@ class PKAssetsManager:
             
             # Only load from local cache if it's fresh AND has sufficient data
             if not is_local_stale and not has_insufficient_data:
-                stockDict, stockDataLoaded = PKAssetsManager.loadDataFromLocalPickle(
-                    stockDict, configManager, downloadOnly, defaultAnswer, 
+                result = PKAssetsManager.loadDataFromLocalPickle(
+                    stockDict, configManager, downloadOnly, defaultAnswer,
                     exchangeSuffix, cache_file, isTrading, stockCodes
                 )
+                if isinstance(result, tuple) and len(result) == 2:
+                    stockDict, stockDataLoaded = result
+                else:
+                    stockDict = result
+                    stockDataLoaded = bool(stockDict)
             else:
                 # Try to download fresh data from GitHub first
                 success, github_path, num_instruments = PKAssetsManager.download_fresh_pkl_from_github(intraday=isIntraday)
@@ -1923,24 +1939,48 @@ class PKAssetsManager:
                         + colorText.END
                     )
                     # Now load from the updated local cache
-                    stockDict, stockDataLoaded = PKAssetsManager.loadDataFromLocalPickle(
-                        stockDict, configManager, downloadOnly, defaultAnswer, 
+                    result = PKAssetsManager.loadDataFromLocalPickle(
+                        stockDict, configManager, downloadOnly, defaultAnswer,
                         exchangeSuffix, cache_file, isTrading, stockCodes
                     )
+                    if isinstance(result, tuple) and len(result) == 2:
+                        stockDict, stockDataLoaded = result
+                    else:
+                        stockDict = result
+                        stockDataLoaded = bool(stockDict)
                 else:
                     # If GitHub download failed, still try to load from local (might be better than nothing)
                     default_logger().warning("Failed to download fresh data from GitHub, using stale/insufficient local cache")
-                    stockDict, stockDataLoaded = PKAssetsManager.loadDataFromLocalPickle(
-                        stockDict, configManager, downloadOnly, defaultAnswer, 
+                    result = PKAssetsManager.loadDataFromLocalPickle(
+                        stockDict, configManager, downloadOnly, defaultAnswer,
                         exchangeSuffix, cache_file, isTrading, stockCodes
                     )
+                    if isinstance(result, tuple) and len(result) == 2:
+                        stockDict, stockDataLoaded = result
+                    else:
+                        stockDict = result
+                        stockDataLoaded = bool(stockDict)
+        from pkscreener.classes.ConfigManager import default_period, default_duration
+        default_non_intraday_period = default_period
+        default_non_intraday_duration = default_duration
+        default_intraday_period = "1d"
+        default_intraday_duration = "1m"
         if (
             not stockDataLoaded
-            and ("1d" if isIntraday else ConfigManager.default_period)
-            == configManager.period
-            and ("1m" if isIntraday else ConfigManager.default_duration)
-            == configManager.duration
-        ) or forceRedownload:
+            and (
+                forceRedownload
+                or (
+                    (not isIntraday
+                     and configManager.period == default_non_intraday_period
+                     and configManager.duration == default_non_intraday_duration)
+                    or (
+                        isIntraday
+                        and configManager.period == default_intraday_period
+                        and configManager.duration == default_intraday_duration
+                    )
+                )
+            )
+        ):
             stockDict, stockDataLoaded = PKAssetsManager.downloadSavedDataFromServer(
                 stockDict, configManager, downloadOnly, defaultAnswer, retrial, 
                 forceLoad, stockCodes, exchangeSuffix, isIntraday, forceRedownload, 
@@ -1952,14 +1992,14 @@ class PKAssetsManager:
                 + "  [+] Cache unavailable on pkscreener server, Continuing.."
                 + colorText.END
             )
-        if not stockDataLoaded and not recentDownloadFromOriginAttempted and not PKAssetsManager.had_rate_limit_errors():
-            stockDict, _ = PKAssetsManager.downloadLatestData(stockDict,configManager,stockCodes,exchangeSuffix=exchangeSuffix,downloadOnly=downloadOnly,numStocksPerIteration=len(stockCodes) if stockCodes is not None else 0)
+        # if not stockDataLoaded and not recentDownloadFromOriginAttempted and not PKAssetsManager.had_rate_limit_errors():
+        #     stockDict, _ = PKAssetsManager.downloadLatestData(stockDict,configManager,stockCodes,exchangeSuffix=exchangeSuffix,downloadOnly=downloadOnly,numStocksPerIteration=len(stockCodes) if stockCodes is not None else 0)
         # See if we need to save stock data
         stockDataLoaded = stockDataLoaded or (len(stockDict) > 0 and (len(stockDict) != initialLoadCount))
         leftOutStocks = list(set(stockCodes)-set(list(stockDict.keys())))
-        if len(leftOutStocks) > int(len(stockCodes)*0.05) and not PKAssetsManager.had_rate_limit_errors():
-            # More than 5 % of stocks are still remaining
-            stockDict, _ = PKAssetsManager.downloadLatestData(stockDict,configManager,leftOutStocks,exchangeSuffix=exchangeSuffix,downloadOnly=downloadOnly,numStocksPerIteration=len(leftOutStocks) if leftOutStocks is not None else 0)
+        # if len(leftOutStocks) > int(len(stockCodes)*0.05) and not PKAssetsManager.had_rate_limit_errors():
+        #     # More than 5 % of stocks are still remaining
+        #     stockDict, _ = PKAssetsManager.downloadLatestData(stockDict,configManager,leftOutStocks,exchangeSuffix=exchangeSuffix,downloadOnly=downloadOnly,numStocksPerIteration=len(leftOutStocks) if leftOutStocks is not None else 0)
         if stockDataLoaded and downloadOnly:
             PKAssetsManager.saveStockData(stockDict,configManager,initialLoadCount,isIntraday,downloadOnly, forceSave=stockDataLoaded)
         
@@ -2212,7 +2252,10 @@ class PKAssetsManager:
             chunksize = MB if serverBytes >= MB else (KB if serverBytes >= KB else 1)
             filesize = int( serverBytes / chunksize)
             if filesize > 20 and chunksize == MB: # Saved data can't be in KBs. Something definitely went wrong. It should be upward of 40MB
-                bar, spinner = Utility.tools.getProgressbarStyle()
+                try:
+                    bar, spinner = Utility.tools.getProgressbarStyle()
+                except Exception:
+                    bar, spinner = '|', 'dots'
                 try:
                     f = open(
                             os.path.join(Archiver.get_user_data_dir(), cache_file),
@@ -2235,6 +2278,19 @@ class PKAssetsManager:
                         ) as f:
                         stockData = pickle.load(f)
                     if len(stockData) > 0:
+                        if all(isinstance(key, tuple) for key in stockData.keys()):
+                            grouped_stock_data = {}
+                            for key, value in stockData.items():
+                                stock = key[0] if len(key) > 0 else None
+                                if not stock:
+                                    continue
+                                if stock not in grouped_stock_data:
+                                    grouped_stock_data[stock] = {}
+                                if len(key) > 1:
+                                    grouped_stock_data[stock][key[1]] = value
+                                else:
+                                    grouped_stock_data[stock] = value
+                            stockData = grouped_stock_data
                         multiIndex = stockData.keys()
                         if isinstance(multiIndex, pd.MultiIndex):
                                 # If we requested for multiple stocks from yfinance
@@ -2283,6 +2339,9 @@ class PKAssetsManager:
                         if stockDict and len(stockDict) > 0:
                             # Pass stockCodes for selective tick updates
                             stockDict = PKAssetsManager._apply_fresh_ticks_to_data(stockDict, stockCodes=stockCodes)
+                            if isTrading:
+                                PKAssetsManager.validate_data_freshness(stockDict, isTrading=isTrading)
+                                PKAssetsManager.ensure_data_freshness(stockDict)
                         # Remove the progress bar now!
                         OutputControls().moveCursorUpLines(1)
                 except KeyboardInterrupt: # pragma: no cover
@@ -2335,7 +2394,7 @@ class PKAssetsManager:
                 ) or "Y").upper()
             else:
                 response = defaultAnswer
-        except ValueError as e:  # pragma: no cover
+        except Exception as e:  # pragma: no cover
             default_logger().debug(e, exc_info=True)
-            pass
+            response = "Y"
         return "Y" if response != "N" else "N"
