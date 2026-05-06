@@ -289,6 +289,9 @@ jobs:
         MONITORING_BOT_RUNNER: "MONITORING_BOT_RUNNER"
         CI_PAT: ${{ secrets.CI_PAT }}
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        PKDevTools_Default_Log_Level: 10
+        PKDEVTOOLS_LOG_LEVEL: 10
+        PKDEVTOOLS_DEBUG_FILES: 'pkscreenercli.py,pkscreenerbot.py,PKAnalytics.py'
       run: |
         pip3 install setuptools libsql
         pip3 install libsql-experimental || pip3 install libsql || echo "libsql not available (will use SQLite fallback)"

@@ -271,6 +271,7 @@ from pkscreener.classes.WorkflowManager import run_workflow
 import pkscreener.classes.ConfigManager as ConfigManager
 from pkscreener.classes.PKAnalytics import PKAnalyticsService
 from PKDevTools.classes.FunctionTimeouts import ping
+from PKDevTools.classes.log import default_logger
 try:
     from PKDevTools.classes.DBManager import DBManager
     from PKDevTools.classes.UserSubscriptions import PKUserSusbscriptions
@@ -318,7 +319,7 @@ logging.basicConfig(
 # set higher logging level for httpx to avoid all GET and POST requests being logged
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
-logger = logging.getLogger(__name__)
+logger = default_logger()
 
 # # State definitions for top level conversation
 # SELECTING_ACTION, ADDING_MEMBER, ADDING_SELF, DESCRIBING_SELF = map(chr, range(4))

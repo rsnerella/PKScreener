@@ -779,6 +779,9 @@ jobs:
         GSHEET_SERVICE_ACCOUNT_DEV: ${{secrets.GSHEET_SERVICE_ACCOUNT_DEV}}
         GSHEET_VIEWONLY_LINK: ${{secrets.GSHEET_VIEWONLY_LINK}}
         ALERT_TRIGGER: ${{ inputs.alertTrigger || 'N' }}
+        PKDevTools_Default_Log_Level: 10
+        PKDEVTOOLS_LOG_LEVEL: 10
+        PKDEVTOOLS_DEBUG_FILES: 'PKAnalytics.py'
       run: |
         ${{ inputs.prerequisites }}
         # pip install libsql
