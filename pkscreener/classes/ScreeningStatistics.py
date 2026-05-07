@@ -578,9 +578,6 @@ class ScreeningStatistics:
                     #     self.default_logger.debug("Using VectorBT for signal computation")
             except (ImportError, OSError, FileNotFoundError) as e:
                 # Handle missing vectorbt or template files
-                if self.default_logger:
-                    self.default_logger.debug(f"VectorBT import failed: {e}")
-                
                 # Try to download missing template files
                 try:
                     import os
@@ -2253,6 +2250,7 @@ class ScreeningStatistics:
                     data.loc[i - 1, "ATRTrailingStop"],
                     data.loc[i, "nLoss"],
                 )
+            
         except Exception as e:
             if self.default_logger:
                 self.default_logger.debug(f"ATR calculation failed: {e}")

@@ -62,15 +62,12 @@ class StockScreener:
         # Re-setup logger for this child process if needed
         if logLevel > logging.NOTSET:
             pklog.setup_custom_logger(
-                "pkscreener.child",
+                "pkscreener",
                 levelname=logLevel,
                 trace=False,
                 log_file_path=None,  # Let the main process handle file output
                 selective_debug=False
             )
-        # Now log something to verify
-        # if hostRef and hostRef.default_logger:
-        #     hostRef.default_logger.debug(f"Child process started for stock: {stock}")
 
     # @tracelog
     def screenStocks(
