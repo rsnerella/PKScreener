@@ -46,12 +46,19 @@ class PKDataService():
             # Suppress any multiprocessing errors/warnings
             with SuppressOutput(suppress_stderr=True, suppress_stdout=True):
                 initialize() # Let's get the cookies set-up right
+                # We are setting maxWorkers to 1 here to avoid any 
+                # potential issues with the NSE website blocking 
+                # requests due to too many parallel requests. 
+                # This can be increased if you have a large 
+                # number of stocks and want faster downloads, 
+                # but be cautious about potential blocking.
                 PKScheduler.scheduleTasks(tasksList=tasksList,
                                         label=f"Downloading latest symbol/sector info. (Total={len(stockCodes)} records in {len(tasksList)} batches){'Be Patient!' if len(stockCodes)> 2000 else ''}",
                                         timeout=(5+2.5*configManager.longTimeout*4), # 5 seconds additional time for getting multiprocessing ready
                                         minAcceptableCompletionPercentage=100,
                                         submitTaskAsArgs=True,
-                                        showProgressBars=True)
+                                        showProgressBars=True, 
+                                        maxWorkers=1) 
             for task in tasksList:
                 if task.result is not None:
                     taskResult = json.loads(task.result)

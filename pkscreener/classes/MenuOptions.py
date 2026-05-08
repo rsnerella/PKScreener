@@ -773,32 +773,69 @@ class menus:
         lineIndex = 1
         substituteIndex = 0
         rawDictionary = { k:v.strip() for k, v in rawDictionary.items()}
-        dictToRender = dict((key,rawDictionary[key]) for key in rawDictionary.keys() if str(key).isnumeric())
-        dictToRenderOnTheirOwnLine = {key: rawDictionary[key] for key in renderExceptionKeys}
-        keysToRender = set(dictToRender) - set(dictToRenderOnTheirOwnLine)
-        dictToRender = {key: rawDictionary[key] for key in keysToRender}
+        
+        # CRITICAL FIX: Filter out keys that don't exist in rawDictionary
+        # For renderExceptionKeys: only keep keys that actually exist in rawDictionary
+        filtered_renderExceptionKeys = [key for key in renderExceptionKeys if key in rawDictionary]
+        
+        # For skip: only keep keys that actually exist in rawDictionary
+        filtered_skip = [key for key in skip if key in rawDictionary] if skip else []
+        
+        # For subOnly: only keep keys that actually exist in rawDictionary
+        filtered_subOnly = [key for key in subOnly if key in rawDictionary] if subOnly else []
+        
+        # Log warnings for invalid keys (optional - for debugging)
+        if len(filtered_renderExceptionKeys) != len(renderExceptionKeys):
+            invalid_keys = set(renderExceptionKeys) - set(filtered_renderExceptionKeys)
+            default_logger().debug(f"fromDictionary: Ignoring renderExceptionKeys not in dictionary: {invalid_keys}")
+        
+        if filtered_skip and len(filtered_skip) != len(skip):
+            invalid_keys = set(skip) - set(filtered_skip)
+            default_logger().debug(f"fromDictionary: Ignoring skip keys not in dictionary: {invalid_keys}")
+        
+        if filtered_subOnly and len(filtered_subOnly) != len(subOnly):
+            invalid_keys = set(subOnly) - set(filtered_subOnly)
+            default_logger().debug(f"fromDictionary: Ignoring subOnly keys not in dictionary: {invalid_keys}")
+        
+        # Build dictToRenderOnTheirOwnLine only with valid keys
+        dictToRenderOnTheirOwnLine = {key: rawDictionary[key] for key in filtered_renderExceptionKeys}
+        
+        # Filter numeric keys for dictToRender (excluding exception keys)
+        dictToRender = dict((key, rawDictionary[key]) for key in rawDictionary.keys() 
+                           if str(key).isnumeric() and key not in dictToRenderOnTheirOwnLine)
         
         if len(dictToRender.keys()) > 0:
             maxLengthOfItem = len(max(dictToRender.values(), key=len)) + 4
         else:
             maxLengthOfItem = 0
+            
         for key in rawDictionary:
-            if skip is not None and key in skip:
+            # Skip if key is in filtered_skip (already validated to exist in dictionary)
+            if filtered_skip and key in filtered_skip:
                 continue
+            
             m = menu()
             menuText = str(rawDictionary[key])
-            if "{0}" in menuText and len(substitutes) > 0:
-                if isinstance(substitutes[substituteIndex],int) and substitutes[substituteIndex] == 0:
+            
+            # Handle substitutes (only if substitutes list has enough items)
+            if "{0}" in menuText and substitutes and substituteIndex < len(substitutes):
+                if isinstance(substitutes[substituteIndex], int) and substitutes[substituteIndex] == 0:
                     substituteIndex += 1
                     continue
                 menuText = menuText.format(f"{colorText.WARN}{substitutes[substituteIndex]}{colorText.END}")
                 substituteIndex += 1
-            menuText = f"{menuText if str(key) not in subOnly else (f'{menuText}(₹/$)' if self.is_subscription_enabled else f'{menuText}')}"
+            
+            # Handle subOnly keys (only if key is in filtered_subOnly, which is already validated)
+            if key in filtered_subOnly:
+                menuText = f'{menuText}(₹/$)' if self.is_subscription_enabled else f'{menuText}'
+            
             menuText = menuText.ljust(maxLengthOfItem+7) if key in dictToRender.keys() else menuText
+            
             m.create(
                 str(key).upper(), menuText, level=self.level, parent=parent
             )
-            if key in renderExceptionKeys:
+            
+            if key in dictToRenderOnTheirOwnLine:
                 m.isException = True
                 line += 2
                 lineIndex = 1
@@ -819,17 +856,23 @@ class menus:
                 lineIndex = 1
                 m.line = line
                 m.lineIndex = lineIndex
+                
             self.menuDict[str(key).upper()] = m
+            
         return self
 
     def render(self, asList=False, coloredValues=[]):
         menuText = [] if asList else ""
-        for k in self.menuDict.keys():
-            m = self.menuDict[k]
+        
+        # Filter coloredValues to only include keys that exist in menuDict
+        valid_coloredValues = [key for key in coloredValues if key in self.menuDict]
+        
+        for m in self.menuDict.values():
             if asList:
                 menuText.append(m)
             else:
-                menuText = menuText + m.render(coloredValues=([] if asList else coloredValues))
+                menuText = menuText + m.render(coloredValues=valid_coloredValues)
+        
         return menuText
 
     def renderPinnedMenu(self,substitutes=[],skip=[]):

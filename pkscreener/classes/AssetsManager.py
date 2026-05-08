@@ -27,6 +27,7 @@ import glob
 import os
 import pickle
 import shutil
+import sys
 import tempfile
 import pandas as pd
 import requests
@@ -1650,8 +1651,12 @@ class PKAssetsManager:
             OutputControls().printOutput(
                 colorText.GREEN + "=> Already Cached." + colorText.END
             )
-            if downloadOnly:
-                OutputControls().printOutput(colorText.GREEN + f"=> {cache_file}" + colorText.END)
+        if downloadOnly:
+            OutputControls().printOutput(colorText.GREEN + f"[+] Download finished! Please check the files listed above and the main pkl file listed below:" + colorText.END)
+            rootDirs = [Archiver.get_user_data_dir(),Archiver.get_user_indices_dir()]
+            OutputControls().printOutput(colorText.GREEN + f"=> {cache_file.replace("actions-data-download",f'results{os.sep}Data')}" + colorText.END)
+            OutputControls().printOutput(colorText.GREEN + f"[+] All files saved in directories:\n[+] {'\n[+] '.join(rootDirs)}" + colorText.END)
+            sys.exit(0) # Exit after download if cache already exists
         return cache_file
 
     @staticmethod

@@ -480,21 +480,21 @@ def _handle_download_menu(launcher, m0, m1, m2, configManager, fetcher) -> bool:
     OutputControls().printOutput(colorText.END, end="")
     
     if selDownloadOption.upper() == "D":
+        PKAnalyticsService().send_event("D_D")
         OutputControls().printOutput(
             f"{colorText.GREEN}Launching PKScreener to Download daily OHLC data.{colorText.END}\n"
             f"{colorText.FAIL}{launcher} -a Y -e -d{colorText.END}"
         )
-        PKAnalyticsService().send_event("D_D")
         sleep(2)
         os.system(f"{launcher} -a Y -e -d")
         return True
     
     elif selDownloadOption.upper() == "I":
+        PKAnalyticsService().send_event("D_I")
         OutputControls().printOutput(
             f"{colorText.GREEN}Launching PKScreener to Download intraday OHLC data.{colorText.END}\n"
             f"{colorText.FAIL}{launcher} -a Y -e -d -i 1m{colorText.END}"
         )
-        PKAnalyticsService().send_event("D_I")
         sleep(2)
         os.system(f"{launcher} -a Y -e -d -i 1m")
         return True

@@ -64,8 +64,8 @@ if __name__ == '__main__':
 
 progressUpdater=None
 class PKScheduler():
-    def scheduleTasks(tasksList=[], label:str=None, showProgressBars=False,submitTaskAsArgs=True, timeout=6, minAcceptableCompletionPercentage=100):
-        n_workers = multiprocessing.cpu_count() - 1  # set this to the number of cores you have on your machine
+    def scheduleTasks(tasksList=[], label:str=None, showProgressBars=False,submitTaskAsArgs=True, timeout=6, minAcceptableCompletionPercentage=100, maxWorkers=None):
+        n_workers = maxWorkers if maxWorkers is not None else multiprocessing.cpu_count() - 1  # set this to the number of cores you have on your machine
         global progressUpdater
         console = Console()
         with Progress(
