@@ -523,17 +523,19 @@ class PKImageTools:
         rowPixelRunValue += dimensions['arttext_height'] + 1
         
         # Draw report title
+        label = label.strip() if label is not None else ""
         if "Scanners >" in label:
-            label = str(label.split("Scanners >")[0])
+            label_updated = str(label.split("Scanners >")[0])
+            if not label_updated.strip().endswith("|"):
+                label = label_updated
         reportTitle = f"  [+] As of {PKDateUtilities.currentDateTime().strftime('%d-%m-%y %H.%M.%S')} IST > You chose {label}"
-        draw.text((startColValue, rowPixelRunValue), reportTitle, font=stdfont, fill=menuColor)
+        draw.text((startColValue, rowPixelRunValue), reportTitle, font=stdfont, fill=gridColor)
         rowPixelRunValue += dimensions['label_height'] + 1
         
         # Prepare data frames and labels for rendering
         dfs_to_print = [styledTable, backtestSummary, backtestDetail]
         unstyled_dfs = [table, backtestSummary, backtestDetail]
-        if "Scanners >" in label:
-            label = str(label.split("Scanners >")[0])
+
         titleLabels = [
             f"  [+] Scan results for {label} :",
             summaryLabel or "  [+] For chosen scan, summary of correctness from past:",
@@ -556,7 +558,7 @@ class PKImageTools:
             colPixelRunValue = startColValue
             draw.text(
                 (colPixelRunValue, rowPixelRunValue),
-                titleLabels[counter], font=stdfont, fill=menuColor
+                titleLabels[counter], font=stdfont, fill=gridColor
             )
             rowPixelRunValue += dimensions['label_height']
             
@@ -570,7 +572,7 @@ class PKImageTools:
         
         # Draw repo and legend text
         repoText = PKImageTools.getRepoHelpText(table, backtestSummary)
-        draw.text((startColValue, rowPixelRunValue + 1), repoText, font=artfont, fill=menuColor)
+        draw.text((startColValue, rowPixelRunValue + 1), repoText, font=artfont, fill=gridColor)
         rowPixelRunValue += 2 * dimensions['label_height'] + 20
         
         legendText = legendPrefixText + PKImageTools.getLegendHelpText(table, backtestSummary)

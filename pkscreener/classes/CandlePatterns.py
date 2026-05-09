@@ -68,7 +68,7 @@ class CandlePatterns:
     # Arrange if statements with max priority from top to bottom
     def findPattern(self, processedData, dict, saveDict,filterPattern=None):
         data = processedData.head(4)
-        data = data[::-1]
+        data = data[::-1] # Reverse the dataframe so that its the oldest date first
         hasCandleStickPattern = False
         if "Pattern" not in saveDict.keys():
             saveDict["Pattern"] = ""
@@ -349,5 +349,5 @@ class CandlePatterns:
                 saveDict["Pattern"] = self.findCurrentSavedValue(dict,saveDict,"Pattern")[1] +  f"Bearish Engulfing"
             hasCandleStickPattern = True
         if hasCandleStickPattern:
-            return filterPattern in saveDict["Pattern"] if filterPattern is not None else hasCandleStickPattern
+            return filterPattern in saveDict["Pattern"] if (filterPattern is not None and filterPattern != "No Filter") else hasCandleStickPattern
         return False

@@ -837,7 +837,9 @@ class PKAssetsManager:
         
         if not stockDict:
             return stockDict
-
+        isTrading = PKDateUtilities.isTradingTime() and (PKDateUtilities.wasTradedOn() or not PKDateUtilities.isTodayHoliday()[0])
+        if not isTrading:
+            return stockDict
         timezone = pytz.timezone("Asia/Kolkata")
         
         # Determine which stocks to update
@@ -1815,14 +1817,14 @@ class PKAssetsManager:
         recentDownloadFromOriginAttempted = False
         srcFilePath = os.path.join(Archiver.get_user_data_dir(), cache_file)
         isTrading = PKDateUtilities.isTradingTime() and (PKDateUtilities.wasTradedOn() or not PKDateUtilities.isTodayHoliday()[0])
-        if isTrading or not os.path.exists(srcFilePath):
-            try:
-                from pkbrokers.kite.examples.externals import kite_fetch_save_pickle
-                if kite_fetch_save_pickle():
-                    default_logger().info("pkl file update succeeded!")
-            except Exception as e:
-                default_logger().error(f"Error downloading latest file:{e}")
-            isTrading = False
+        # if isTrading or not os.path.exists(srcFilePath):
+        #     try:
+        #         from pkbrokers.kite.examples.externals import kite_fetch_save_pickle
+        #         if kite_fetch_save_pickle():
+        #             default_logger().info("pkl file update succeeded!")
+        #     except Exception as e:
+        #         default_logger().error(f"Error downloading latest file:{e}")
+        #     isTrading = False
         if userDownloadOption is not None and "B" in userDownloadOption: # Backtests
             isTrading = False
         # Check if NSEI data is requested

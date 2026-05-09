@@ -2308,6 +2308,10 @@ def prepareStocksForScreening(testing, downloadOnly, listStockCodes, indexOption
     """
     if not downloadOnly:
         updateMenuChoiceHierarchy()
+        ConsoleUtility.PKConsoleTools.clearScreen(forceTop=True)
+        OutputControls().printOutput(colorText.FAIL
+                + "  [+] You chose: " + colorText.END + colorText.GREEN + f"{menuChoiceHierarchy}" + colorText.END
+            )
     indexOption = int(indexOption)
     if listStockCodes is None or len(listStockCodes) == 0:
         if indexOption >= 0 and indexOption <= 14:
