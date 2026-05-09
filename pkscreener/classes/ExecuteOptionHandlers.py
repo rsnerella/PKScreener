@@ -142,9 +142,9 @@ def handle_execute_option_7(
                     insideBarToLookback = options[4] if options[4] != "D" else '0'
                     maLength = options[4] if options[4] != "D" else '0'
                     selectedChoice["4"] = options[4] if options[4] != "D" else '0'
-                if len(options) >= 6:
-                    maLength = options[5] if options[5] != "D" else '0'
-                    selectedChoice["5"] = options[5] if options[5] != "D" else '0'
+                # if len(options) >= 6:
+                #     maLength = options[5] if options[5] != "D" else '0'
+                #     selectedChoice["5"] = options[5] if options[5] != "D" else '0'
         else:
             respChartPattern, insideBarToLookback = ConsoleMenuUtility.PKConsoleMenuTools.promptChartPatterns(selectedMenu)
     else:
