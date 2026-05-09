@@ -43,7 +43,7 @@ if [[ $(uname) == "Darwin" ]]; then
             export PATH="/opt/homebrew/bin:$PATH"
         fi
         
-        # Install libomp via Homebrew
+        # Install libomp via Homebrew (skip pip entirely for ARM64)
         brew update || true
         brew install libomp
         
@@ -69,12 +69,17 @@ if [[ $(uname) == "Darwin" ]]; then
         # Intel macOS (x86_64)
         export MACOSX_DEPLOYMENT_TARGET=10.9
         
-        echo "Detected Intel architecture, trying pip intel-openmp first..."
+        echo "Detected Intel architecture, trying pip intel-openmp with venv..."
+        
+        # Create a temporary venv for pip operations to avoid PEP 668 issues
+        TEMP_VENV=$(mktemp -d)
+        python3 -m venv "$TEMP_VENV"
+        source "$TEMP_VENV/bin/activate"
         
         # Try to install intel-openmp via pip (faster, no brew dependency)
-        if pip3 install intel-openmp 2>/dev/null; then
+        if pip install intel-openmp 2>/dev/null; then
             echo "Successfully installed intel-openmp via pip"
-            SITE_PACKAGES=$(python3 -c "import site; print(site.getsitepackages()[0])")
+            SITE_PACKAGES=$(python -c "import site; print(site.getsitepackages()[0])")
             echo "Site packages: $SITE_PACKAGES"
             
             if [ -f "$SITE_PACKAGES/intel_openmp/lib/libiomp5.dylib" ]; then
@@ -83,15 +88,20 @@ if [[ $(uname) == "Darwin" ]]; then
                 PREFIX="$SITE_PACKAGES"
             else
                 echo "intel-openmp installed but library not found, falling back to brew"
+                deactivate
                 brew install libomp
                 PREFIX="/usr/local/opt/libomp"
             fi
         else
             # Fallback to libomp from Homebrew
             echo "intel-openmp not available, falling back to libomp from Homebrew"
+            deactivate
             brew install libomp
             PREFIX="/usr/local/opt/libomp"
         fi
+        
+        # Clean up temp venv
+        rm -rf "$TEMP_VENV"
 
         export CC=/usr/bin/clang
         export CXX=/usr/bin/clang++
@@ -117,5 +127,16 @@ if [[ "$GITHUB_EVENT_NAME" == "schedule" || "$CIRRUS_CRON" == "nightly" ]]; then
     export CIBW_BUILD_FRONTEND='pip; args: --pre --extra-index-url "https://pypi.anaconda.org/scientific-python-nightly-wheels/simple"'
 fi
 
-pip3 install setuptools wheel twine
-python setup.py clean build sdist bdist_wheel
+# Install build dependencies using venv to avoid PEP 668 issues
+if [[ $(uname) == "Darwin" ]] && [[ "$CIBW_BUILD" != *-macosx_arm64 ]]; then
+    # For Intel macOS, we already have a venv or use system python with --user flag
+    pip3 install --user setuptools wheel twine 2>/dev/null || pip3 install setuptools wheel twine
+else
+    # For ARM64 and other platforms, use regular pip (in CI environment)
+    pip3 install setuptools wheel twine
+fi
+
+# Use python directly for setup commands
+python3 -c "import setuptools; import wheel" 2>/dev/null || echo "Warning: Build tools may not be properly installed"
+
+python3 setup.py clean build sdist bdist_wheel
