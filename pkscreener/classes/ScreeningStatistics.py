@@ -3359,6 +3359,16 @@ class ScreeningStatistics:
         if df is None or len(df) == 0:
             return False
         data = df.copy()
+        
+        # Check if index is timezone-aware and convert to naive if needed
+        if data.index.tz is not None:
+            # Convert timezone-aware index to naive (remove timezone)
+            data.index = data.index.tz_localize(None)
+        
+        # Also convert any datetime columns if they exist
+        for col in data.select_dtypes(include=['datetime64']).columns:
+            if data[col].dt.tz is not None:
+                data[col] = data[col].dt.tz_localize(None)
         data = data.fillna(0)
         data = data.replace([np.inf, -np.inf], 0)
         data = data[::-1]  # Reverse the dataframe so that its the oldest date first
@@ -3461,32 +3471,19 @@ class ScreeningStatistics:
             t = t + 1
         return foundStockWithCupNHandle, df_point
 
-    def validate_cup(self,df, cup_start, cup_bottom, cup_end):
-        """Validate if the detected cup meets shape and depth criteria."""
-        start_price = df["close"].iloc[cup_start]
-        bottom_price = df["close"].iloc[cup_bottom]
-        end_price = df["close"].iloc[cup_end]
-
-        # Cup Depth should be reasonable (10% - 50% drop from highs)
-        depth = (start_price - bottom_price) / start_price
-        if depth < 0.1 or depth > 0.5:
-            return False  
-
-        # Symmetry Check
-        left_depth = start_price - bottom_price
-        right_depth = end_price - bottom_price
-        if abs(left_depth - right_depth) / max(left_depth, right_depth) > 0.2:
-            return False  
-
-        # U-shape validation (Avoiding V-bottoms)
-        midpoint = (cup_start + cup_end) // 2
-        if df["close"].iloc[midpoint] < bottom_price * 1.05:
-            return False  
-
-        return True
-
-    def get_dynamic_order(self,df):
+    def get_dynamic_order(self,df_src):
         """Dynamically calculate 'order' parameter for local extrema detection based on volatility."""
+        df = df_src.copy()
+        
+        # Check if index is timezone-aware and convert to naive if needed
+        if df.index.tz is not None:
+            # Convert timezone-aware index to naive (remove timezone)
+            df.index = df.index.tz_localize(None)
+        
+        # Also convert any datetime columns if they exist
+        for col in df.select_dtypes(include=['datetime64']).columns:
+            if df[col].dt.tz is not None:
+                df[col] = df[col].dt.tz_localize(None)
         avg_volatility = df['Volatility'].mean()
         
         # If volatility is high, require more data points to confirm a cup
@@ -3496,70 +3493,368 @@ class ScreeningStatistics:
             return int(df["close"].mean() * 0.05) + 1  # Lower volatility → allow faster pattern detection
         else:
             return 15  # Default case
+
+    def validate_cup(self, df_src, cup_start, cup_bottom, cup_end):
+        """
+        Validate if the detected cup meets shape and depth criteria.
         
-    def validate_volume(self,df, cup_start, cup_end, handle_end):
-        """Ensure decreasing volume in the cup and increasing volume at breakout."""
-        avg_cup_volume = df["volume"].iloc[cup_start:cup_end].mean()
-        avg_handle_volume = df["volume"].iloc[cup_end:handle_end].mean()
-        breakout_volume = df["volume"].iloc[handle_end]
+        A proper cup should have:
+        1. U-shape (not V-shape) - prices arc smoothly
+        2. Reasonable depth (10-40%)
+        3. Symmetrical left and right sides
+        4. Volume contraction at bottom
+        """
+        df = df_src.copy()
+        
+        # Handle timezone-aware indices - ONLY if index is DatetimeIndex
+        if hasattr(df.index, 'tz') and df.index.tz is not None:
+            df.index = df.index.tz_localize(None)
+        
+        # Also convert any datetime columns if they exist
+        for col in df.select_dtypes(include=['datetime64']).columns:
+            if hasattr(df[col].dt, 'tz') and df[col].dt.tz is not None:
+                df[col] = df[col].dt.tz_localize(None)
+        
+        # Get price points using iloc since we're using integer indices
+        start_price = df.iloc[cup_start]["close"]
+        bottom_price = df.iloc[cup_bottom]["close"]
+        end_price = df.iloc[cup_end]["close"]
+        
+        # =============================================================
+        # CRITERION 1: Cup Depth (10% - 40% is healthy)
+        # =============================================================
+        depth = (start_price - bottom_price) / start_price * 100
+        if depth < 8 or depth > 45:
+            return False
+        
+        # =============================================================
+        # CRITERION 2: Rim Symmetry (left and right rims within 5%)
+        # =============================================================
+        rim_diff_pct = abs(start_price - end_price) / start_price * 100
+        if rim_diff_pct > 5:
+            return False
+        
+        # =============================================================
+        # CRITERION 3: U-Shape Validation (not V-shaped)
+        # =============================================================
+        # Check middle of cup - should be in lower half
+        midpoint_idx = cup_start + (cup_end - cup_start) // 2
+        midpoint_price = df.iloc[midpoint_idx]["close"]
+        midpoint_position = (midpoint_price - bottom_price) / (start_price - bottom_price) * 100
+        
+        if midpoint_position > 40:  # Middle should be in lower 40% of cup
+            return False
+        
+        # =============================================================
+        # CRITERION 4: Smooth Arc (progressive price movement)
+        # =============================================================
+        # Left side prices should gradually descend, right side gradually ascend
+        left_step = max(1, (cup_bottom - cup_start) // 10)
+        right_step = max(1, (cup_end - cup_bottom) // 10)
+        
+        left_side_prices = [df.iloc[i]["close"] for i in range(cup_start, cup_bottom + 1, left_step)]
+        right_side_prices = [df.iloc[i]["close"] for i in range(cup_bottom, cup_end + 1, right_step)]
+        
+        # Check for monotonic descent on left side (with some tolerance)
+        left_descending = True
+        for i in range(len(left_side_prices) - 1):
+            if left_side_prices[i] < left_side_prices[i+1] * 0.98:
+                left_descending = False
+                break
+        
+        # Check for monotonic ascent on right side (with some tolerance)
+        right_ascending = True
+        for i in range(len(right_side_prices) - 1):
+            if right_side_prices[i] > right_side_prices[i+1] * 1.02:
+                right_ascending = False
+                break
+        
+        if not (left_descending or right_ascending):
+            # Allow slight wobbles, but reject severe choppiness
+            left_volatility = np.std(left_side_prices) / np.mean(left_side_prices) if left_side_prices else 1
+            right_volatility = np.std(right_side_prices) / np.mean(right_side_prices) if right_side_prices else 1
+            if left_volatility > 0.05 or right_volatility > 0.05:  # More than 5% volatility
+                return False
+        
+        # =============================================================
+        # CRITERION 5: Cup Width (minimum 15 days, maximum 180 days)
+        # =============================================================
+        cup_width = cup_end - cup_start
+        if cup_width < 15 or cup_width > 180:
+            return False
+        
+        return True
 
-        return avg_cup_volume > avg_handle_volume and breakout_volume > avg_handle_volume
-
-    def find_cup_and_handle(self,df,saveDict=None,screenDict=None,order=0):
-        """Detect Cup and Handle pattern with volume and breakout confirmation."""
+    def validate_volume_for_cup(self, df_src, cup_start, cup_end, handle_end, volume_prices=None):
+        """
+        Ensure proper volume pattern for Cup and Handle:
+        1. Volume declines into the cup bottom
+        2. Volume is low and flat during handle formation
+        3. Volume surges on breakout
+        """
+        df = df_src.copy()
+        
+        # Handle timezone-aware indices - ONLY if index is DatetimeIndex
+        if hasattr(df.index, 'tz') and df.index.tz is not None:
+            df.index = df.index.tz_localize(None)
+        
+        # Also convert any datetime columns if they exist
+        for col in df.select_dtypes(include=['datetime64']).columns:
+            if hasattr(df[col].dt, 'tz') and df[col].dt.tz is not None:
+                df[col] = df[col].dt.tz_localize(None)
+        
+        # Check if volume column exists
+        if "volume" not in df.columns:
+            return True  # Skip volume validation if no volume data
+        
+        volume_prices = df["volume"]
+        
+        try:
+            # =============================================================
+            # CRITERION 1: Volume declines into cup bottom
+            # =============================================================
+            cup_length = cup_end - cup_start
+            if cup_length > 10:
+                # Volume in early cup vs late cup
+                early_cup_end = cup_start + cup_length // 3
+                late_cup_start = cup_end - cup_length // 3
+                
+                early_volume = volume_prices.iloc[cup_start:early_cup_end].mean()
+                late_volume = volume_prices.iloc[late_cup_start:cup_end].mean()
+                
+                # Volume should be lower near the bottom (late cup)
+                if early_volume > 0 and late_volume > early_volume * 1.1:
+                    return False  # Volume increased into bottom (bad)
+            
+            # =============================================================
+            # CRITERION 2: Volume contraction during handle
+            # =============================================================
+            handle_length = handle_end - cup_end
+            if handle_length > 3:
+                handle_volume = volume_prices.iloc[cup_end:handle_end].mean()
+                cup_volume = volume_prices.iloc[cup_start:cup_end].mean()
+                
+                # Handle volume should be lower than cup average
+                if cup_volume > 0 and handle_volume > cup_volume * 0.9:
+                    return False  # Handle volume not contracting enough
+            
+            # =============================================================
+            # CRITERION 3: Volume should trend downward in handle
+            # =============================================================
+            if handle_length > 5:
+                handle_first_half = volume_prices.iloc[cup_end:cup_end + handle_length//2].mean()
+                handle_second_half = volume_prices.iloc[cup_end + handle_length//2:handle_end].mean()
+                
+                # Volume should be lower in second half of handle (drying up)
+                if handle_first_half > 0 and handle_second_half > handle_first_half * 0.85:
+                    return False  # Volume not drying up sufficiently
+            
+            return True
+            
+        except Exception as e:
+            if self.default_logger:
+                self.default_logger.debug(f"Volume validation error: {e}")
+            return True  # Don't reject pattern due to volume calculation errors
+                
+    def find_cup_and_handle(self, df_src, saveDict=None, screenDict=None, order=0):
+        """
+        Detect Cup and Handle pattern with integrated validation methods.
+        """
         try:
             from scipy.signal import argrelextrema
-        except:
+        except ImportError:
+            if self.default_logger:
+                self.default_logger.warning("scipy.signal.argrelextrema not available")
             return False, None
-        close_prices = df["close"].values
-        if order <=0:
-            order = self.get_dynamic_order(df)  # Set order dynamically
-        local_min_idx = argrelextrema(close_prices, np.less, order=order)[0]  # Local minima (potential cup bottoms)
-        local_max_idx = argrelextrema(close_prices, np.greater, order=order)[0]  # Local maxima (potential resistance)
-
-        if len(local_min_idx) < 3 or len(local_max_idx) < 2:
-            return False,None  
-
-        # Identifying the Cup
-        cup_start, cup_bottom, cup_end = local_min_idx[0], local_min_idx[len(local_min_idx)//2], local_min_idx[-1]
-
-        if not self.validate_cup(df, cup_start, cup_bottom, cup_end):
-            return False,None  
-
-        # Handle Detection
-        handle_start = cup_end
-        potential_handle = df["close"][handle_start:handle_start+15]
-        handle_min = potential_handle.min()
-        handle_end = potential_handle.idxmin()
-
-        # Handle should not drop more than 50% of cup depth
-        cup_depth = df["close"].iloc[cup_start] - df["close"].iloc[cup_bottom]
-        handle_depth = df["close"].iloc[handle_start] - handle_min
-        if handle_depth > cup_depth * 0.5:
-            return False,None  
-
-        # Breakout Confirmation
-        breakout_level = df["close"].iloc[cup_start]
-        breakout = df[df.index > handle_end]["close"].gt(breakout_level).any()
-        if not breakout:
-            return False,None  
-
-        # Volume Confirmation
-        if not self.validate_volume(df, cup_start, cup_end, handle_end):
-            return False,None  
+        
+        # =========================================================================
+        # INPUT VALIDATION
+        # =========================================================================
+        if df_src is None or len(df_src) < 90:
+            return False, None
+        
+        # Make a copy and handle timezone
+        df = df_src.copy()
+        if df.index.tz is not None:
+            df.index = df.index.tz_localize(None)
+        for col in df.select_dtypes(include=['datetime64']).columns:
+            if df[col].dt.tz is not None:
+                df[col] = df[col].dt.tz_localize(None)
+        
+        # Ensure data is sorted with oldest first for pattern detection
+        df_oldest_first = df[::-1].reset_index(drop=True)
+        
+        close_prices = df_oldest_first["close"].values
+        n = len(close_prices)
+        
+        # =========================================================================
+        # STEP 1: DETECT LOCAL MINIMA AND MAXIMA
+        # =========================================================================
+        if order <= 0:
+            order = max(5, min(15, n // 15))
+        
+        local_min_idx = argrelextrema(close_prices, np.less, order=order)[0]
+        local_max_idx = argrelextrema(close_prices, np.greater, order=order)[0]
+        
+        if len(local_min_idx) < 2 or len(local_max_idx) < 3:
+            return False, None
+        
+        # =========================================================================
+        # STEP 2: FIND VALID CUP PATTERNS
+        # =========================================================================
+        valid_cups = []
+        
+        for bottom_idx in local_min_idx:
+            if bottom_idx < 15 or bottom_idx > n - 30:
+                continue
+            
+            # Find left and right rims
+            left_candidates = [i for i in local_max_idx if i < bottom_idx]
+            right_candidates = [i for i in local_max_idx if i > bottom_idx]
+            
+            if not left_candidates or not right_candidates:
+                continue
+            
+            left_rim_idx = max(left_candidates)
+            right_rim_idx = min(right_candidates)
+            
+            cup_start, cup_bottom, cup_end = left_rim_idx, bottom_idx, right_rim_idx
+            
+            # Use the validate_cup method
+            if not self.validate_cup(df_oldest_first, cup_start, cup_bottom, cup_end):
+                continue
+            
+            valid_cups.append((cup_start, cup_bottom, cup_end, close_prices[cup_start]))
+        
+        if not valid_cups:
+            return False, None
+        
+        # =========================================================================
+        # STEP 3: DETECT HANDLE AND VALIDATE VOLUME
+        # =========================================================================
+        best_pattern = None
+        best_score = 0
+        
+        for cup_start, cup_bottom, cup_end, cup_rim_price in valid_cups:
+            # Search for handle after cup end
+            handle_search_end = min(cup_end + 35, n - 5)
+            if handle_search_end <= cup_end + 3:
+                continue
+            
+            # Find handle bottom
+            handle_slice = close_prices[cup_end:handle_search_end]
+            handle_bottom_local_idx = np.argmin(handle_slice)
+            handle_bottom_idx = cup_end + handle_bottom_local_idx
+            
+            handle_low = close_prices[handle_bottom_idx]
+            cup_bottom_price = close_prices[cup_bottom]
+            cup_left_price = close_prices[cup_start]
+            
+            # Handle should be in upper half of cup
+            cup_mid_price = (cup_left_price + cup_bottom_price) / 2
+            if handle_low < cup_mid_price:
+                continue
+            
+            # Calculate handle decline
+            cup_depth_pct = (cup_left_price - cup_bottom_price) / cup_left_price * 100
+            handle_decline_pct = (close_prices[cup_end] - handle_low) / close_prices[cup_end] * 100
+            handle_decline_of_cup = (handle_decline_pct / cup_depth_pct * 100) if cup_depth_pct > 0 else 100
+            
+            # Handle decline should be 10-50% of cup depth
+            if handle_decline_of_cup < 10 or handle_decline_of_cup > 50:
+                continue
+            
+            # Validate volume pattern (if volume data exists)
+            volume_valid = self.validate_volume_for_cup(df_oldest_first, cup_start, cup_end, handle_bottom_idx)
+            if not volume_valid:
+                continue
+            
+            # =========================================================================
+            # STEP 4: CHECK FOR BREAKOUT
+            # =========================================================================
+            breakout_idx = None
+            for i in range(handle_bottom_idx + 1, min(handle_bottom_idx + 20, n)):
+                if close_prices[i] > cup_rim_price * 0.995:
+                    breakout_idx = i
+                    break
+            
+            # Calculate quality score
+            score = 0
+            
+            # Cup symmetry (30 points max)
+            symmetry = 100 - abs(cup_left_price - close_prices[cup_end]) / cup_left_price * 100
+            score += symmetry * 0.3
+            
+            # Cup depth (30 points max)
+            if 15 <= cup_depth_pct <= 30:
+                score += 30
+            elif 10 <= cup_depth_pct <= 40:
+                score += 20
+            else:
+                score += 10
+            
+            # Handle quality (25 points max)
+            if 25 <= handle_decline_of_cup <= 35:
+                score += 25
+            elif 15 <= handle_decline_of_cup <= 45:
+                score += 15
+            else:
+                score += 5
+            
+            # Breakout recency (15 points max)
+            if breakout_idx is not None:
+                days_since_breakout = n - breakout_idx
+                if days_since_breakout <= 3:
+                    score += 15
+                elif days_since_breakout <= 10:
+                    score += 10
+                elif days_since_breakout <= 20:
+                    score += 5
+            
+            if score > best_score:
+                best_score = score
+                best_pattern = {
+                    'cup_start': cup_start,
+                    'cup_bottom': cup_bottom,
+                    'cup_end': cup_end,
+                    'handle_bottom': handle_bottom_idx,
+                    'breakout_idx': breakout_idx,
+                    'cup_rim_price': cup_rim_price,
+                    'cup_depth_pct': cup_depth_pct,
+                    'handle_decline_pct': handle_decline_pct,
+                    'score': score
+                }
+        
+        # =========================================================================
+        # STEP 5: RETURN RESULTS
+        # =========================================================================
+        if best_pattern is None or best_score < 50:
+            return False, None
+        
+        pattern_details = (
+            best_pattern['cup_start'], 
+            best_pattern['cup_bottom'], 
+            best_pattern['cup_end'],
+            best_pattern['handle_bottom'], 
+            best_pattern['breakout_idx']
+        )
         
         if saveDict is not None and screenDict is not None:
-            saved = self.findCurrentSavedValue(screenDict,saveDict, "Pattern")
-            screenDict["Pattern"] = (
-                saved[0] 
-                + colorText.GREEN
-                + f"Cup and Handle ({cup_start},{cup_bottom},{cup_end},{handle_start},{handle_end})"
-                + colorText.END
+            saved = self.findCurrentSavedValue(screenDict, saveDict, "Pattern")
+            pattern_display = f"Cup&Handle (D:{best_pattern['cup_depth_pct']:.0f}%, H:{best_pattern['handle_decline_pct']:.0f}%)"
+            
+            screenDict["Pattern"] = saved[0] + colorText.GREEN + pattern_display + colorText.END
+            saveDict["Pattern"] = saved[1] + pattern_display
+            saveDict["Pattern_Score"] = best_score
+        
+        if self.default_logger and best_score >= 60:
+            self.default_logger.debug(
+                f"Cup&Handle found: depth={best_pattern['cup_depth_pct']:.1f}%, "
+                f"handle={best_pattern['handle_decline_pct']:.1f}%, score={best_score:.0f}"
             )
-            saveDict["Pattern"] = saved[1] + f"Cup and Handle ({cup_start},{cup_bottom},{cup_end},{handle_start},{handle_end})"
+        
+        return True, pattern_details
 
-        return True,(cup_start, cup_bottom, cup_end, handle_start, handle_end)
-    
     def findCurrentSavedValue(self, screenDict, saveDict, key):
         existingScreen = screenDict.get(key)
         existingSave = saveDict.get(key)

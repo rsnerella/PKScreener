@@ -473,13 +473,13 @@ class StockScreener:
                             return returnLegibleData(f"hasBbandsSqz:{hasBbandsSqz}")
                     elif respChartPattern == 7:
                         try:
+                            from pkscreener.classes.MenuOptions import CANDLESTICK_DICT
                             filterPattern = None
                             if str(maLength) != "0":
-                                from pkscreener.classes.MenuOptions import CANDLESTICK_DICT
                                 filterPattern = CANDLESTICK_DICT[str(maLength)]
                         except: # pragma: no cover
                             pass
-                        if "Cup and Handle" in filterPattern:
+                        if (filterPattern is not None and "Cup and Handle" in filterPattern) or CANDLESTICK_DICT.get(insideBarToLookback,"") == "Cup and Handle":
                             isCandlePattern,_ = screener.find_cup_and_handle(fullData,saveDictionary,screeningDictionary,int(maLength))
                         else:
                             isCandlePattern = candlePatterns.findPattern(
