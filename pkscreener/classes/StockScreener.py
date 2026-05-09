@@ -1239,7 +1239,7 @@ class StockScreener:
                     while num_diff > 0:
                         columns.append(f"temp{num_diff}")
                         num_diff -= 1
-                    data = pd.DataFrame(hostData["data"], columns=columns, index=parsed_index)
+                    data = pd.DataFrame(hostData["data"], columns=columns, index=index_data)
                 else:
                     hostRef.default_logger.debug(e, exc_info=True)
         
