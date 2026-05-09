@@ -2653,6 +2653,12 @@ def updateMenuChoiceHierarchy():
                     from pkscreener.classes.MenuOptions import level4_X_ChartPattern_MASignalMenuDict
                     if level4_key in level4_X_ChartPattern_MASignalMenuDict:
                         level4_text = level4_X_ChartPattern_MASignalMenuDict[level4_key]
+            elif level2_key == "7" and level3_key == "7":  # Chart Patterns
+                if hasattr(sys.modules[__name__], 'CANDLESTICK_DICT'):
+                    from pkscreener.classes.MenuOptions import CANDLESTICK_DICT
+                    if level4_key in CANDLESTICK_DICT:
+                        level4_text = CANDLESTICK_DICT[level4_key]
+                        selectedChoice["4"] = level4_key  # Update the selected choice to the actual pattern name for consistency in hierarchy
             elif level2_key == "6" and level3_key in ["7", "10"]:  # Lorenzian under Reversal
                 if hasattr(sys.modules[__name__], 'level4_X_Lorenzian_MenuDict'):
                     from pkscreener.classes.MenuOptions import level4_X_Lorenzian_MenuDict
@@ -2662,7 +2668,8 @@ def updateMenuChoiceHierarchy():
             if level4_text:
                 level4_text = level4_text.strip() #.split('(')[0].strip()
                 hierarchy_parts.append(level4_text)
-        
+            
+            level5_text = None
         # Join with " > " separator
         menuChoiceHierarchy = " > ".join(hierarchy_parts)
         
