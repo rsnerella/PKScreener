@@ -217,40 +217,55 @@ jobs:
           echo "compressed_name=pkscreenercli_macos.gz" >> $GITHUB_OUTPUT
         fi
 
-    - name: Get cache version identifier
-      id: cache-id
-      shell: bash
-      run: |
-        # Use run_id + run_attempt for uniqueness
-        echo "cache_suffix=${{ github.run_id }}-${{ github.run_attempt }}" >> $GITHUB_OUTPUT
+    # - name: Get cache version identifier
+    #   id: cache-id
+    #   shell: bash
+    #   run: |
+    #     # Use run_id + run_attempt for uniqueness
+    #     echo "cache_suffix=${{ github.run_id }}-${{ github.run_attempt }}" >> $GITHUB_OUTPUT
 
     # ============================================================================
     # RESTORE EXECUTABLE CACHE (BEFORE SCAN)
     # ============================================================================
-# RESTORE - Look for any cached version (use restore-keys)
-    - name: Restore Executable Cache (before scan)
-      id: exe-cache-restore
-      uses: actions/cache/restore@v4
+    # RESTORE - Look for any cached version (use restore-keys)
+    # - name: Restore Executable Cache (before scan)
+    #   id: exe-cache-restore
+    #   uses: actions/cache/restore@v4
+    #   with:
+    #     path: ${{ steps.exe-names.outputs.compressed_name }}
+    #     # Try exact match with specific version + run_id first
+    #     key: exe-${{ runner.os }}-${{ steps.releaseurlsetter.outputs.VERSION }}-${{ steps.cache-id.outputs.cache_suffix }}
+    #     # Then fall back to any version of this release
+    #     restore-keys: |
+    #       exe-${{ runner.os }}-${{ steps.releaseurlsetter.outputs.VERSION }}-
+    #       exe-${{ runner.os }}-
+
+    # ============================================================================
+    # CACHE EXECUTABLE - Single action that handles both restore and save
+    # ============================================================================
+    - name: Cache Executable
+      id: exe-cache
+      uses: actions/cache@v4
       with:
         path: ${{ steps.exe-names.outputs.compressed_name }}
-        # Try exact match with specific version + run_id first
-        key: exe-${{ runner.os }}-${{ steps.releaseurlsetter.outputs.VERSION }}-${{ steps.cache-id.outputs.cache_suffix }}
-        # Then fall back to any version of this release
+        # This exact key won't match (because it has run_id), so it falls back to restore-keys
+        key: exe-${{ runner.os }}-${{ steps.releaseurlsetter.outputs.VERSION }}-${{ github.run_id }}
+        # These restore-keys WILL be used as fallbacks
         restore-keys: |
           exe-${{ runner.os }}-${{ steps.releaseurlsetter.outputs.VERSION }}-
           exe-${{ runner.os }}-
-
-    - name: Log executable cache restore status
-      shell: bash
-      run: |
-        echo "=== Executable Cache Restore Status ==="
-        echo "Cache hit: ${{ steps.exe-cache-restore.outputs.cache-hit }}"
-        if [ -f "${{ steps.exe-names.outputs.compressed_name }}" ]; then
-          FILE_SIZE=$(stat -c%s "${{ steps.exe-names.outputs.compressed_name }}" 2>/dev/null || stat -f%z "${{ steps.exe-names.outputs.compressed_name }}" 2>/dev/null)
-          echo "✅ Compressed executable restored from cache: $FILE_SIZE bytes"
-        else
-          echo "📦 No cached executable found - will download fresh"
-        fi
+            
+    # - name: Log executable cache restore status
+    #   shell: bash
+    #   run: |
+    #     echo "=== Executable Cache Restore Status ==="
+    #     echo "Cache hit: ${{ steps.exe-cache-restore.outputs.cache-hit }}"
+    #     if [ -f "${{ steps.exe-names.outputs.compressed_name }}" ]; then
+    #       FILE_SIZE=$(stat -c%s "${{ steps.exe-names.outputs.compressed_name }}" 2>/dev/null || stat -f%z "${{ steps.exe-names.outputs.compressed_name }}" 2>/dev/null)
+    #       echo "✅ Compressed executable restored from cache: $FILE_SIZE bytes"
+    #     else
+    #       echo "📦 No cached executable found - will download fresh"
+    #     fi
 
     # ============================================================================
     # DOWNLOAD & COMPRESS EXECUTABLE (if not cached)
@@ -258,7 +273,7 @@ jobs:
     # DOWNLOAD - ONLY if cache not hit
     - name: Download and compress executable on Ubuntu
       id: download-exe-ubuntu
-      if: (steps.exe-cache-restore.outputs.cache-hit != 'true') && startsWith(runner.os, 'Linux') && steps.check-tensorflow.outputs.requires_tensorflow != 'true'
+      if: (steps.exe-cache.outputs.cache-hit != 'true') && startsWith(runner.os, 'Linux') && steps.check-tensorflow.outputs.requires_tensorflow != 'true'
       shell: bash
       env:
         exe_path: ${{ steps.releaseurlsetter.outputs.DOWNLOAD_URL }}
@@ -304,7 +319,7 @@ jobs:
 
     - name: Download and compress executable on Windows
       id: download-exe-windows
-      if: (steps.exe-cache-restore.outputs.cache-hit != 'true') && startsWith(runner.os, 'Windows') && steps.check-tensorflow.outputs.requires_tensorflow != 'true'
+      if: (steps.exe-cache.outputs.cache-hit != 'true') && startsWith(runner.os, 'Windows') && steps.check-tensorflow.outputs.requires_tensorflow != 'true'
       shell: bash
       env:
         exe_path: ${{ steps.releaseurlsetter.outputs.DOWNLOAD_URL }}
@@ -351,7 +366,7 @@ jobs:
     # DECOMPRESS EXECUTABLE FOR USE (if cached)
     # ============================================================================
     - name: Decompress executable from cache (Ubuntu)
-      if: (steps.exe-cache-restore.outputs.cache-hit == 'true') && startsWith(runner.os, 'Linux') && steps.check-tensorflow.outputs.requires_tensorflow != 'true'
+      if: (steps.exe-cache.outputs.cache-hit == 'true') && startsWith(runner.os, 'Linux') && steps.check-tensorflow.outputs.requires_tensorflow != 'true'
       shell: bash
       run: |
         BINARY_NAME="${{ steps.exe-names.outputs.binary_name }}"
@@ -380,7 +395,7 @@ jobs:
         echo "✅ Executable ready at: $BINARY_NAME"
 
     - name: Decompress executable from cache (Windows)
-      if: (steps.exe-cache-restore.outputs.cache-hit == 'true') && startsWith(runner.os, 'Windows') && steps.check-tensorflow.outputs.requires_tensorflow != 'true'
+      if: (steps.exe-cache.outputs.cache-hit == 'true') && startsWith(runner.os, 'Windows') && steps.check-tensorflow.outputs.requires_tensorflow != 'true'
       shell: bash
       run: |
         BINARY_NAME="${{ steps.exe-names.outputs.binary_name }}"
@@ -842,26 +857,26 @@ jobs:
 
     # ============================================================================
     # SAVE EXECUTABLE CACHE (AFTER SCAN - Only if we downloaded fresh)
-    # ============================================================================
-    - name: Save Executable Cache (after scan)
-      if: (steps.download-exe-ubuntu.outcome == 'success' || steps.download-exe-windows.outcome == 'success') && steps.check-tensorflow.outputs.requires_tensorflow != 'true'
-      uses: actions/cache/save@v4
-      with:
-        path: /home/runner/work/PKScreener/PKScreener/${{ steps.exe-names.outputs.compressed_name }}
-        key: exe-${{ runner.os }}-${{ steps.releaseurlsetter.outputs.VERSION }}-${{ steps.cache-id.outputs.cache_suffix }}
+    # # ============================================================================
+    # - name: Save Executable Cache (after scan)
+    #   if: (steps.download-exe-ubuntu.outcome == 'success' || steps.download-exe-windows.outcome == 'success') && steps.check-tensorflow.outputs.requires_tensorflow != 'true'
+    #   uses: actions/cache/save@v4
+    #   with:
+    #     path: /home/runner/work/PKScreener/PKScreener/${{ steps.exe-names.outputs.compressed_name }}
+    #     key: exe-${{ runner.os }}-${{ steps.releaseurlsetter.outputs.VERSION }}-${{ steps.cache-id.outputs.cache_suffix }}
 
-    - name: Log executable cache save status
-      if: (steps.download-exe-ubuntu.outcome == 'success' || steps.download-exe-windows.outcome == 'success') && steps.check-tensorflow.outputs.requires_tensorflow != 'true'
-      shell: bash
-      run: |
-        ls -l
-        echo "=== Executable Cache Save Status ==="
-        if [ -f /home/runner/work/PKScreener/PKScreener/"${{ steps.exe-names.outputs.compressed_name }}" ]; then
-          FILE_SIZE=$(stat -c%s "${{ steps.exe-names.outputs.compressed_name }}" 2>/dev/null || stat -f%z "${{ steps.exe-names.outputs.compressed_name }}" 2>/dev/null)
-          echo "💾 Saved compressed executable to cache: $FILE_SIZE bytes"
-        else
-          echo "⚠️ No compressed executable found to save"
-        fi
+    # - name: Log executable cache save status
+    #   if: (steps.download-exe-ubuntu.outcome == 'success' || steps.download-exe-windows.outcome == 'success') && steps.check-tensorflow.outputs.requires_tensorflow != 'true'
+    #   shell: bash
+    #   run: |
+    #     ls -l
+    #     echo "=== Executable Cache Save Status ==="
+    #     if [ -f /home/runner/work/PKScreener/PKScreener/"${{ steps.exe-names.outputs.compressed_name }}" ]; then
+    #       FILE_SIZE=$(stat -c%s "${{ steps.exe-names.outputs.compressed_name }}" 2>/dev/null || stat -f%z "${{ steps.exe-names.outputs.compressed_name }}" 2>/dev/null)
+    #       echo "💾 Saved compressed executable to cache: $FILE_SIZE bytes"
+    #     else
+    #       echo "⚠️ No compressed executable found to save"
+    #     fi
 
     # ============================================================================
     # SAVE STOCK DATA CACHE (AFTER SCAN - Non-market hours only)
