@@ -55,6 +55,7 @@ from time import sleep, time
 import threading
 import pytz
 import telegram
+import requests
 
 # =============================================================================
 # MOCK PKG_RESOURCES FOR APSCHEDULER COMPATIBILITY
@@ -306,6 +307,7 @@ from telegram.ext import (
     CallbackContext
 )
 from PKDevTools.classes.Singleton import SingletonType, SingletonMixin
+from PKDevTools.classes.Utils import random_user_agent
 
 class PKLocalCache(SingletonMixin, metaclass=SingletonType):
     def __init__(self):
@@ -418,7 +420,7 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 
-def registerUser(user, forceFetch=False):
+def registerUser(user, forceFetch=False, query=None):
     """
     Register a user in the system and retrieve their OTP and subscription information.
     
@@ -440,15 +442,67 @@ def registerUser(user, forceFetch=False):
             user.id, user.username, f"{user.first_name} {user.last_name}",
             validityIntervalInSeconds=configManager.otpInterval
         )
+        if query is not None:
+            try:
+                query.answer(text="Working. Please wait...", show_alert=False)
+            except:
+                pass
         if str(otpValue).strip() != '0' and user.id not in PKLocalCache().registeredIDs:
             PKLocalCache().registeredIDs.append(user.id)
     is_subscription_enabled = bool(int(PKEnvironment().SUBSCRIPTION_ENABLED))
     if not is_subscription_enabled:
         from PKDevTools.classes.DBManager import LocalOTPCache
         otpValue, _ = LocalOTPCache().generate_emergency_otp_with_pdf(userid=user.id, username=user.username)
+        # Let's try and download the PDF ourselves for upto 30 seconds
+        trial_attempt = 0
+        max_trial = 3
+        while trial_attempt <= max_trial and otpValue > 0:
+            if query is not None:
+                try:
+                    query.answer(text="Still working. Please wait...", show_alert=False)
+                except:
+                    pass
+                resp = tryFetchFromServer(cache_file=f"{user.id}.pdf",directory="results/Data",hideOutput=False, branchName="SubData", no_cache=True)
+                if resp is None or resp.status_code != 200:
+                    trial_attempt = trial_attempt + 1
+                    sleep(10)
+                else:
+                    break
+            else:
+                break
     return otpValue, subsModel, subsValidity, alertUser
 
-
+def tryFetchFromServer(cache_file,repoOwner="pkjmesra",repoName="PKScreener",directory="results/Data",hideOutput=False,branchName="refs/heads/actions-data-download"):
+    resp = None
+    try:
+        cache_buster = f"?t={int(time.time())}"
+        cache_url = f"https://raw.githubusercontent.com/{repoOwner}/{repoName}/{branchName}/{directory}/{cache_file}{cache_buster}"
+        headers = {
+                    'authority': 'raw.githubusercontent.com',
+                    'accept': '*/*',
+                    'accept-language': 'en-US,en;q=0.9',
+                    'dnt': '1',
+                    'sec-ch-ua-mobile': '?0',
+                    # 'sec-ch-ua-platform': '"macOS"',
+                    'sec-fetch-dest': 'empty',
+                    'sec-fetch-mode': 'cors',
+                    'sec-fetch-site': 'cross-site',                  
+                    'origin': 'https://github.com',
+                    'referer': f'https://github.com/{repoOwner}/{repoName}/blob/{branchName}/{directory}/{cache_file}',
+                    'user-agent': f'{random_user_agent()}' 
+                    #'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36
+            }
+        default_logger().debug(f"Fetching cache file: {cache_file}")
+        # Use direct requests without cache for no_cache=True
+        headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        headers['Pragma']= 'no-cache'
+        resp = requests.get(cache_url, headers=headers, timeout=30)
+        default_logger().debug(f"Fetching cache file: {cache_file} with no_cache=True, status code: {resp.status_code}")
+    except:
+        pass
+    return resp
+    
+        
 def loadRegisteredUsers():
     """Load all registered user IDs from the database into the local cache."""
     dbManager = DBManager()
@@ -1112,7 +1166,7 @@ def viewSubscriptionOptions(update: Update, context: CallbackContext, sendOTP=Fa
             otpValue = 0
             alertUser = None
             dbManager = DBManager()
-            otpValue, subsModel, subsValidity, alertUser = registerUser(user, forceFetch=True)
+            otpValue, subsModel, subsValidity, alertUser = registerUser(user, forceFetch=True, query=query)
             if is_subscription_enabled:
                 if alertUser is not None and len(alertUser.scannerJobs) > 0:
                     scannerJobsSubscribed = ", ".join(alertUser.scannerJobs)

@@ -525,9 +525,10 @@ class PKImageTools:
         # Draw report title
         label = label.strip() if label is not None else ""
         if "Scanners >" in label:
-            label_updated = str(label.split("Scanners >")[0])
-            if not label_updated.strip().endswith("|"):
-                label = label_updated
+            scanner_labels = label.split("Scanners >")
+            label_updated = str(scanner_labels[0])
+            if label_updated.strip().endswith("|") and len(scanner_labels) >= 2:
+                label = label_updated + scanner_labels[1]
         reportTitle = f"  [+] As of {PKDateUtilities.currentDateTime().strftime('%d-%m-%y %H.%M.%S')} IST > You chose {label}"
         draw.text((startColValue, rowPixelRunValue), reportTitle, font=stdfont, fill=gridColor)
         rowPixelRunValue += dimensions['label_height'] + 1
