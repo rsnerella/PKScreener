@@ -799,7 +799,7 @@ jobs:
 
     - name: Run Scan on Ubuntu (binary, no TensorFlow)
       shell: bash
-      timeout-minutes: 10
+      timeout-minutes: 5
       if: startsWith(runner.os, 'Linux') && steps.check-tensorflow.outputs.requires_tensorflow != 'true'
       env:
         RUNNER : "GitHub_Actions"
