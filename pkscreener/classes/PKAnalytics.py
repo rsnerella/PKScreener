@@ -321,6 +321,26 @@ class PKAnalyticsService(SingletonMixin, metaclass=SingletonType):
         else:
             self._send_event_sync(**event_data)
 
+    def _normalize_os_name(self, os_name):
+        """Normalize OS names to GA4 standard values."""
+        os_mapping = {
+            "Windows": "Windows",
+            "Darwin": "macOS",
+            "Linux": "Linux",
+            "iOS": "iOS",
+            "Android": "Android"
+        }
+        return os_mapping.get(os_name, os_name)
+
+    def _detect_mobile_brand(self):
+        """Detect if running on mobile (for future use)."""
+        # This would require additional detection logic
+        return None
+
+    def _detect_mobile_model(self):
+        """Detect mobile model (for future use)."""
+        return None
+
     def _send_event_sync(self, category, action, label=None, value=None, custom_dimensions=None):
         """
         Synchronous event sending (runs in background thread).
@@ -346,7 +366,15 @@ class PKAnalyticsService(SingletonMixin, metaclass=SingletonType):
                 # Required GA4 fields
                 "event_category": category,
                 "event_action": action,
-                
+                # ============ DEVICE & PLATFORM (GA4 Standard) ============
+                "platform": "Windows" if self.os == "Windows" else 
+                        "iOS" if self.os == "Darwin" and self.onefile else 
+                        "macOS" if self.os == "Darwin" else 
+                        "Android" if self.os == "Linux" and "ANDROID" in os.environ.get("TERM", "") else 
+                        "Linux",
+                "device.category": "desktop",  # or "mobile", "tablet"
+                "device.operating_system": self._normalize_os_name(self.os),
+                "device.operating_system_version": self.os_version,
                 # Session information
                 "app_session_id": self.session_id,
                 "session_duration": round(time.time() - self._session_start_time, 1),
@@ -359,7 +387,7 @@ class PKAnalyticsService(SingletonMixin, metaclass=SingletonType):
                 "os": self.os,
                 "os_version": self.os_version,
                 "app_version": self.app_version,
-                "platform": launcher,
+                "launcher": launcher,
                 "is_runner": self.isRunner,
                 "is_container": str(os.environ.get("PKSCREENER_DOCKER", "")).lower() in ("yes", "y", "on", "true", "1"),
                 "one_file_bundle": self.onefile,
@@ -379,11 +407,11 @@ class PKAnalyticsService(SingletonMixin, metaclass=SingletonType):
             # Add location dimensions (for geo analysis)
             if current_location:
                 if "country" in current_location:
-                    event_params["country"] = current_location["country"]
+                    event_params["geo.country"] = current_location["country"]
                 if "region" in current_location:
-                    event_params["region"] = current_location["region"]
+                    event_params["geo.region"] = current_location["region"]
                 if "city" in current_location:
-                    event_params["city"] = current_location["city"]
+                    event_params["geo.city"] = current_location["city"]
             
             # Add custom dimensions (for detailed analysis)
             if custom_dimensions:
