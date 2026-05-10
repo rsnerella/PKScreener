@@ -29,7 +29,7 @@ The MIT License (MIT)
 # required for the package as well as this file, ReadMe.txt file as well as
 # commit the changes into the main/checked-out branch.
 # major.minor.dateOfRelease.pipelineJobNumber
-VERSION = '0.46.20260510.901'
+VERSION = '0.46.20260510.902'
 
 # Expose refactored modules for clean imports
 from pkscreener.classes.MenuNavigation import MenuNavigator
