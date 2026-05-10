@@ -591,18 +591,40 @@ def _handle_download_sector_info(m1, m2, configManager, fetcher) -> bool:
     
     return True
 
-
 def _handle_log_menu(launcher: str):
-    """Handle Log menu"""
+    """Handle Log menu - Cross-platform compatible"""
     PKAnalyticsService().send_event("L")
     OutputControls().printOutput(
         f"{colorText.GREEN}Launching PKScreener to collect logs.{colorText.END}\n"
         f"{colorText.FAIL}{launcher} -a Y -l{colorText.END}"
     )
     sleep(2)
-    os.system(f"{launcher} -a Y -l")
-
-
+    
+    # Method 1: Using subprocess with environment passing (Recommended)
+    env = os.environ.copy()
+    env['PKDEVTOOLS_DEBUG_ALL'] = '1'
+    env['PKDEVTOOLS_LOG_LEVEL'] = '10'
+    import subprocess
+    try:
+        subprocess.run(
+            [launcher, '-l'],
+            env=env,
+            check=False,
+            shell=True  # False for Better security, works cross-platform
+        )
+    except Exception as e:
+        OutputControls().printOutput(f"{colorText.FAIL}Failed to launch: {e}{colorText.END}")
+    
+    # Method 2: Using platform detection (Alternative)
+    # if sys.platform == "win32":
+    #     # Windows PowerShell/CMD syntax
+    #     cmd = f'set PKDEVTOOLS_DEBUG_ALL=1 && set PKDEVTOOLS_LOG_LEVEL=10 && {launcher} -a Y -l'
+    #     os.system(cmd)
+    # else:
+    #     # Unix-like (Linux/macOS)
+    #     cmd = f'export PKDEVTOOLS_DEBUG_ALL=1 && export PKDEVTOOLS_LOG_LEVEL=10 && {launcher} -a Y -l'
+    #     os.system(cmd)
+    
 def _handle_fundamental_menu(
     fetcher,
     userPassedArgs,

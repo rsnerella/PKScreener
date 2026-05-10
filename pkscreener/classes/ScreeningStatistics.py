@@ -546,7 +546,7 @@ class ScreeningStatistics:
             # Check if ATRTrailingStop column exists
             if 'ATRTrailingStop' not in df.columns:
                 if self.default_logger:
-                    self.default_logger.error("computeBuySellSignals: 'ATRTrailingStop' column not found")
+                    self.default_logger.error("computeBuySellSignals: 'ATRTrailingStop' column not found for stock: {stock_name}")
                 return df, {}
             
             # Initialize all signal columns with default values
@@ -1003,7 +1003,7 @@ class ScreeningStatistics:
     # COMPUTE SIGNALS WITH SCORES
     # =============================================================================
 
-    def computeBuySellSignalsWithScores(self, df, ema_period=200, retry=True):
+    def computeBuySellSignalsWithScores(self, df, ema_period=200, retry=True,stock_name="Unknown"):
         """
         Enhanced version that returns detailed signal scores for ranking and filtering.
         
@@ -1058,7 +1058,7 @@ class ScreeningStatistics:
         try:
             # First compute base signals
             df, _ = self.computeBuySellSignals(df, ema_period=ema_period, retry=retry, 
-                                            confirmation_bars=1, volume_confirmation=True)
+                                            confirmation_bars=1, volume_confirmation=True, stock_name=stock_name)
             
             if df is None or len(df) == 0:
                 return df
@@ -2319,7 +2319,8 @@ class ScreeningStatistics:
             try:
                 scored_data = self.computeBuySellSignalsWithScores(
                     data.tail(50),
-                    ema_period=ema_period
+                    ema_period=ema_period,
+                    stock_name=stock_name
                 )
                 
                 if scored_data is not None and not scored_data.empty:

@@ -549,7 +549,6 @@ jobs:
         if: startsWith(runner.os, 'Linux')
         id: read_release
         shell: bash
-        timeout-minutes: 5
         run: |
           pip3 install mistletoe
           python3 .github/workflows/updateVersion.py -p pkscreener/release.md -f /${{ steps.vars.outputs.CURRENT_VERSION }}/ -r /${{ steps.vars.outputs.THIS_VERSION }}/ -t link
@@ -561,7 +560,6 @@ jobs:
 
       - name: Install dependencies for ${{ matrix.TARGET }}
         shell: bash
-        timeout-minutes: 10
         run: ${{ matrix.DEP_BUILD }}
 
       - name: Build for ${{ matrix.TARGET }}
