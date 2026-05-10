@@ -49,6 +49,7 @@ from PKDevTools.classes.log import default_logger
 class AnalyticsCategory:
     """Constants for Google Analytics event categories."""
     APP = "App"
+    BOT_CMD = "Bot_Cmd"
     USER = "User"
     SCAN = "Scan"
     SCREENING = "Scr"
