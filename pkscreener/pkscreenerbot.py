@@ -456,7 +456,7 @@ def registerUser(user, forceFetch=False, query=None):
         # Let's try and download the PDF ourselves for upto 30 seconds
         trial_attempt = 0
         max_trial = 3
-        while trial_attempt <= max_trial and otpValue > 0:
+        while trial_attempt <= max_trial and int(str(otpValue)) > 0:
             if query is not None:
                 try:
                     query.answer(text="Still working. Please wait...", show_alert=False)
