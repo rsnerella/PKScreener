@@ -217,17 +217,28 @@ jobs:
           echo "compressed_name=pkscreenercli_macos.gz" >> $GITHUB_OUTPUT
         fi
 
+    - name: Get cache version identifier
+      id: cache-id
+      shell: bash
+      run: |
+        # Use run_id + run_attempt for uniqueness
+        echo "cache_suffix=${{ github.run_id }}-${{ github.run_attempt }}" >> $GITHUB_OUTPUT
+
     # ============================================================================
     # RESTORE EXECUTABLE CACHE (BEFORE SCAN)
     # ============================================================================
+# RESTORE - Look for any cached version (use restore-keys)
     - name: Restore Executable Cache (before scan)
       id: exe-cache-restore
       uses: actions/cache/restore@v4
       with:
         path: ${{ steps.exe-names.outputs.compressed_name }}
-        key: exe-${{ runner.os }}-${{ steps.releaseurlsetter.outputs.VERSION }}
+        # Try exact match with specific version + run_id first
+        key: exe-${{ runner.os }}-${{ steps.releaseurlsetter.outputs.VERSION }}-${{ steps.cache-id.outputs.cache_suffix }}
+        # Then fall back to any version of this release
         restore-keys: |
-          exe-${{ runner.os }}-${{ steps.releaseurlsetter.outputs.VERSION }}
+          exe-${{ runner.os }}-${{ steps.releaseurlsetter.outputs.VERSION }}-
+          exe-${{ runner.os }}-
 
     - name: Log executable cache restore status
       shell: bash
@@ -244,6 +255,7 @@ jobs:
     # ============================================================================
     # DOWNLOAD & COMPRESS EXECUTABLE (if not cached)
     # ============================================================================
+    # DOWNLOAD - ONLY if cache not hit
     - name: Download and compress executable on Ubuntu
       id: download-exe-ubuntu
       if: (steps.exe-cache-restore.outputs.cache-hit != 'true') && startsWith(runner.os, 'Linux') && steps.check-tensorflow.outputs.requires_tensorflow != 'true'
@@ -836,7 +848,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: /home/runner/work/PKScreener/PKScreener/${{ steps.exe-names.outputs.compressed_name }}
-        key: exe-${{ runner.os }}-${{ steps.releaseurlsetter.outputs.VERSION }}
+        key: exe-${{ runner.os }}-${{ steps.releaseurlsetter.outputs.VERSION }}-${{ steps.cache-id.outputs.cache_suffix }}
 
     - name: Log executable cache save status
       if: (steps.download-exe-ubuntu.outcome == 'success' || steps.download-exe-windows.outcome == 'success') && steps.check-tensorflow.outputs.requires_tensorflow != 'true'
