@@ -249,10 +249,10 @@ jobs:
       with:
         path: ${{ steps.exe-names.outputs.compressed_name }}
         # This exact key won't match (because it has run_id), so it falls back to restore-keys
-        key: exe-${{ runner.os }}-${{ steps.releaseurlsetter.outputs.VERSION }}-${{ github.run_id }}
+        key: exe-${{ runner.os }}-${{ steps.releaseurlsetter.outputs.VERSION }}
         # These restore-keys WILL be used as fallbacks
         restore-keys: |
-          exe-${{ runner.os }}-${{ steps.releaseurlsetter.outputs.VERSION }}-
+          exe-${{ runner.os }}-${{ steps.releaseurlsetter.outputs.VERSION }}
           exe-${{ runner.os }}-
             
     # - name: Log executable cache restore status
