@@ -234,9 +234,10 @@ jobs:
       with:
         path: ${{ steps.exe-names.outputs.compressed_name }}
         # Try exact match with specific version + run_id first
-        key: exe-${{ runner.os }}-${{ steps.releaseurlsetter.outputs.VERSION }}-
+        key: exe-${{ runner.os }}-${{ steps.releaseurlsetter.outputs.VERSION }}-${{ steps.cache-id.outputs.cache_suffix }}
         # Then fall back to any version of this release
         restore-keys: |
+          exe-${{ runner.os }}-${{ steps.releaseurlsetter.outputs.VERSION }}-
           exe-${{ runner.os }}-
 
     - name: Log executable cache restore status
