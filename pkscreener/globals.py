@@ -1549,6 +1549,9 @@ def main(userArgs=None, optionalFinalOutcome_df=None):
                 runOptionName = PKScanRunner.getFormattedChoices(userPassedArgs,selectedChoice)
                 if ((":0:" in runOptionName or "_0_" in runOptionName) and userPassedArgs.progressstatus is not None) or userPassedArgs.progressstatus is not None:
                     runOptionName = userPassedArgs.progressstatus.split("=>")[0].split("  [+] ")[1]
+                PKAnalyticsService().send_event(f"{menuOption}_{indexOption}_{executeOption}")
+                if len(runOptionName) > 0:
+                    PKAnalyticsService().send_event(runOptionName)
                 if menuOption in ["F"]:
                     if "^NSEI" in listStockCodes:
                         listStockCodes.remove("^NSEI")

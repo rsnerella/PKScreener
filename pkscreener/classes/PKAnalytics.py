@@ -334,7 +334,12 @@ class PKAnalyticsService(SingletonMixin, metaclass=SingletonType):
             
             with self._location_lock:
                 current_location = self.locationInfo.copy() if self.locationInfo else {}
-            
+            try:
+                launcher = "cli"
+                launcher = f'"{sys.argv[0]}"' if " " in sys.argv[0] else sys.argv[0]
+                launcher = "py_cli" if launcher.endswith(".py") else launcher.split(".")[-1]
+            except:
+                pass
             # Build event parameters (GA4 structure)
             event_params = {
                 # Required GA4 fields
@@ -353,7 +358,7 @@ class PKAnalyticsService(SingletonMixin, metaclass=SingletonType):
                 "os": self.os,
                 "os_version": self.os_version,
                 "app_version": self.app_version,
-                "platform": "cli",
+                "platform": launcher,
                 "is_runner": self.isRunner,
                 "is_container": str(os.environ.get("PKSCREENER_DOCKER", "")).lower() in ("yes", "y", "on", "true", "1"),
                 "one_file_bundle": self.onefile,
