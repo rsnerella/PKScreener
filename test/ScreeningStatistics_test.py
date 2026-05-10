@@ -3538,6 +3538,203 @@ class TestScreeningStatistics1(unittest.TestCase):
         self.assertIn("B/S", saveDict)
         self.assertIn("B/S", screenDict)
 
+    @patch("pkscreener.classes.Pktalib.pktalib.ATR", return_value=pd.Series([1.0] * 60))
+    @patch("pkscreener.classes.Pktalib.pktalib.RSI", return_value=pd.Series([50.0] * 60))
+    @patch("pkscreener.classes.ScreeningStatistics.ScreeningStatistics.computeBuySellSignals", return_value=(pd.DataFrame({
+            "Buy": [True],
+            "Sell": [True],
+            "Signal_Strength": [1],
+            "Buy_Confidence": [60],
+            "Sell_Confidence": [40]
+        }), {}))
+    def test_findATRTrailingStops_buy_only_mode_filters_to_buy(self, mock_compute, mock_rsi, mock_atr):
+        df = pd.DataFrame({
+            "high": [100.0] * 60,
+            "low": [95.0] * 60,
+            "close": [98.0] * 60,
+            "volume": [1000] * 60
+        })
+        saveDict = {}
+        screenDict = {}
+        result, debug = self.screening_stats.findATRTrailingStops(
+            df,
+            buySellAll=1,
+            saveDict=saveDict,
+            screenDict=screenDict,
+            min_confidence=10,
+            stock_name="TEST"
+        )
+        self.assertTrue(result)
+        self.assertEqual(debug, {})
+        self.assertEqual(saveDict["B/S"], "Buy")
+        self.assertEqual(saveDict["B/S[%]"], "Buy[60]")
+        self.assertIn("Buy[60]", screenDict["B/S[%]"])
+        self.assertEqual(screenDict["Confidence"], 60)
+
+    @patch("pkscreener.classes.ScreeningStatistics.ScreeningStatistics.computeBalancedSignals", return_value=None)
+    @patch("pkscreener.classes.Pktalib.pktalib.ATR", return_value=pd.Series([1.0] * 60))
+    @patch("pkscreener.classes.Pktalib.pktalib.RSI", return_value=pd.Series([50.0] * 60))
+    @patch("pkscreener.classes.ScreeningStatistics.ScreeningStatistics.computeBuySellSignals", return_value=(pd.DataFrame({
+            "Buy": [True],
+            "Sell": [True],
+            "Signal_Strength": [1],
+            "Buy_Confidence": [40],
+            "Sell_Confidence": [70]
+        }), {}))
+    def test_findATRTrailingStops_sell_only_mode_filters_to_sell(self, mock_compute, mock_rsi, mock_atr, mock_balanced):
+        df = pd.DataFrame({
+            "high": [100.0] * 60,
+            "low": [95.0] * 60,
+            "close": [98.0] * 60,
+            "volume": [1000] * 60
+        })
+        saveDict = {}
+        screenDict = {}
+        result, debug = self.screening_stats.findATRTrailingStops(
+            df,
+            buySellAll=2,
+            saveDict=saveDict,
+            screenDict=screenDict,
+            min_confidence=10,
+            stock_name="TEST"
+        )
+        self.assertTrue(result)
+        self.assertEqual(debug, {})
+        self.assertEqual(saveDict["B/S"], "Sell")
+        self.assertEqual(saveDict["B/S[%]"], "Sell[70]")
+        self.assertIn("Sell[70]", screenDict["B/S[%]"])
+        self.assertEqual(screenDict["Confidence"], 70)
+
+    @patch("pkscreener.classes.Pktalib.pktalib.ATR", return_value=pd.Series([1.0] * 60))
+    @patch("pkscreener.classes.Pktalib.pktalib.RSI", return_value=pd.Series([50.0] * 60))
+    @patch("pkscreener.classes.ScreeningStatistics.ScreeningStatistics.computeBuySellSignals", return_value=(pd.DataFrame({
+            "Buy": [True],
+            "Sell": [False],
+            "Signal_Strength": [1],
+            "Buy_Confidence": [55],
+            "Sell_Confidence": [0]
+        }), {}))
+    def test_findATRTrailingStops_any_mode_returns_buy_signal(self, mock_compute, mock_rsi, mock_atr):
+        df = pd.DataFrame({
+            "high": [100.0] * 60,
+            "low": [95.0] * 60,
+            "close": [98.0] * 60,
+            "volume": [1000] * 60
+        })
+        saveDict = {}
+        screenDict = {}
+        result, debug = self.screening_stats.findATRTrailingStops(
+            df,
+            buySellAll=3,
+            saveDict=saveDict,
+            screenDict=screenDict,
+            min_confidence=10,
+            stock_name="TEST"
+        )
+        self.assertTrue(result)
+        self.assertEqual(debug, {})
+        self.assertEqual(saveDict["B/S"], "Buy")
+        self.assertEqual(saveDict["B/S[%]"], "Buy[55]")
+        self.assertIn("Buy[55]", screenDict["B/S[%]"])
+        self.assertEqual(screenDict["Confidence"], 55)
+
+    @patch("pkscreener.classes.Pktalib.pktalib.ATR", return_value=pd.Series([1.0] * 60))
+    @patch("pkscreener.classes.Pktalib.pktalib.RSI", return_value=pd.Series([50.0] * 60))
+    @patch("pkscreener.classes.ScreeningStatistics.ScreeningStatistics.computeBuySellSignals", return_value=(pd.DataFrame({
+            "Buy": [False],
+            "Sell": [True],
+            "Signal_Strength": [1],
+            "Buy_Confidence": [0],
+            "Sell_Confidence": [10]
+        }), {}))
+    def test_findATRTrailingStops_any_mode_preserves_low_confidence_sell(self, mock_compute, mock_rsi, mock_atr):
+        df = pd.DataFrame({
+            "high": [100.0] * 60,
+            "low": [95.0] * 60,
+            "close": [98.0] * 60,
+            "volume": [1000] * 60
+        })
+        saveDict = {}
+        screenDict = {}
+        result, debug = self.screening_stats.findATRTrailingStops(
+            df,
+            buySellAll=3,
+            saveDict=saveDict,
+            screenDict=screenDict,
+            min_confidence=50,
+            stock_name="TEST"
+        )
+        self.assertTrue(result)
+        self.assertEqual(debug, {})
+        self.assertEqual(saveDict["B/S"], "Sell")
+        self.assertEqual(screenDict["Confidence"], 10)
+
+    @patch("pkscreener.classes.Pktalib.pktalib.ATR", return_value=pd.Series([1.0] * 60))
+    @patch("pkscreener.classes.Pktalib.pktalib.RSI", return_value=pd.Series([50.0] * 60))
+    @patch("pkscreener.classes.ScreeningStatistics.ScreeningStatistics.computeBuySellSignals", return_value=(pd.DataFrame({
+            "Buy": [True],
+            "Sell": [False],
+            "Signal_Strength": [1],
+            "Buy_Confidence": [np.nan],
+            "Sell_Confidence": [0]
+        }), {}))
+    def test_findATRTrailingStops_any_mode_handles_nan_confidence(self, mock_compute, mock_rsi, mock_atr):
+        df = pd.DataFrame({
+            "high": [100.0] * 60,
+            "low": [95.0] * 60,
+            "close": [98.0] * 60,
+            "volume": [1000] * 60
+        })
+        saveDict = {}
+        screenDict = {}
+        result, debug = self.screening_stats.findATRTrailingStops(
+            df,
+            buySellAll=3,
+            saveDict=saveDict,
+            screenDict=screenDict,
+            min_confidence=50,
+            stock_name="TEST"
+        )
+        self.assertTrue(result)
+        self.assertEqual(debug, {})
+        self.assertEqual(saveDict["B/S"], "Buy")
+        self.assertEqual(saveDict["B/S[%]"], "Buy[0]")
+        self.assertEqual(screenDict["Confidence"], 0)
+
+    @patch("pkscreener.classes.Pktalib.pktalib.ATR", return_value=pd.Series([1.0] * 60))
+    @patch("pkscreener.classes.Pktalib.pktalib.RSI", return_value=pd.Series([50.0] * 60))
+    @patch("pkscreener.classes.ScreeningStatistics.ScreeningStatistics.computeBuySellSignals", return_value=(pd.DataFrame({
+            "Buy": [True],
+            "Sell": [True],
+            "Signal_Strength": [1],
+            "Buy_Confidence": [30],
+            "Sell_Confidence": [40]
+        }), {}))
+    def test_findATRTrailingStops_any_mode_returns_both_signals(self, mock_compute, mock_rsi, mock_atr):
+        df = pd.DataFrame({
+            "high": [100.0] * 60,
+            "low": [95.0] * 60,
+            "close": [98.0] * 60,
+            "volume": [1000] * 60
+        })
+        saveDict = {}
+        screenDict = {}
+        result, debug = self.screening_stats.findATRTrailingStops(
+            df,
+            buySellAll=3,
+            saveDict=saveDict,
+            screenDict=screenDict,
+            min_confidence=50,
+            stock_name="TEST"
+        )
+        self.assertTrue(result)
+        self.assertEqual(debug, {})
+        self.assertEqual(saveDict["B/S"], "Buy/Sell")
+        self.assertEqual(saveDict["B/S[%]"], "Buy[30]/Sell[40]")
+        self.assertIn("Buy[30]", screenDict["B/S[%]"])
+        self.assertIn("Sell[40]", screenDict["B/S[%]"])
+        self.assertEqual(screenDict["Confidence"], 40)
+
     @patch("pkscreener.classes.Pktalib.pktalib.BBANDS", return_value=(pd.Series([110] * 30), pd.Series([105] * 30), pd.Series([100] * 30)))
     @patch("pkscreener.classes.Pktalib.pktalib.KeltnersChannel", return_value=(pd.Series([99] * 30), pd.Series([113] * 30)))
     def test_findBbandsSqueeze(self, mock_bbands, mock_keltners):

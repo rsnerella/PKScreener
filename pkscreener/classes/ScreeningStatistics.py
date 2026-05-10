@@ -2176,7 +2176,7 @@ class ScreeningStatistics:
         - Threshold comparisons
         
         Args:
-            df_src: OHLCV DataFrame
+            df_src: OHLCV DataFrame (newest first)
             sensitivity: ATR multiplier
             atr_period: Period for ATR calculation
             ema_period: Period for EMA trend filter
@@ -2366,8 +2366,8 @@ class ScreeningStatistics:
         # =========================================================================
         # LEVEL 5: APPLY BALANCED FILTERS (Optional)
         # =========================================================================
-        # Only apply balanced filter if we're looking for specific signals
-        if buySellAll != 3 and (buy_signal or sell_signal):
+        # Only apply balanced filter if we're looking for sell signals only
+        if buySellAll == 2 and sell_signal:
             try:
                 balanced_data = self.computeBalancedSignals(
                     data.tail(50),
@@ -2384,13 +2384,8 @@ class ScreeningStatistics:
                 
                 if balanced_data is not None and not balanced_data.empty:
                     recent_balanced = balanced_data.tail(1)
-                    if buySellAll == 1:  # Only apply filter for buy-only mode
-                        if "Buy_Signal" in recent_balanced.columns:
-                            buy_signal = buy_signal and recent_balanced["Buy_Signal"].iloc[0]
-                    elif buySellAll == 2:  # Only apply filter for sell-only mode
-                        if "Sell_Signal" in recent_balanced.columns:
-                            sell_signal = sell_signal and recent_balanced["Sell_Signal"].iloc[0]
-                    # For buySellAll == 3, skip balanced filtering entirely
+                    if "Sell_Signal" in recent_balanced.columns:
+                        sell_signal = sell_signal and recent_balanced["Sell_Signal"].iloc[0]
                     # self.default_logger.debug(f"computeBalancedSignals for {stock_name}: Returned result=Buy:{buy_signal}, Sell:{sell_signal}")
             except Exception as e:
                 if self.default_logger:
@@ -2414,9 +2409,11 @@ class ScreeningStatistics:
         if buySellAll == 1:  # Buy signals only
             result = buy_signal
             signal_type = "Buy" if buy_signal else "NA"
+            sell_signal = False  # Ensure sell signal is False when looking for buy signals only
         elif buySellAll == 2:  # Sell signals only
             result = sell_signal
             signal_type = "Sell" if sell_signal else "NA"
+            buy_signal = False  # Ensure buy signal is False when looking for sell signals only
         else:  # Any signal (buySellAll == 3)
             result = buy_signal or sell_signal
             if buy_signal:
@@ -2424,13 +2421,8 @@ class ScreeningStatistics:
             if sell_signal:
                 signal_type = "Sell"
             if buy_signal and sell_signal:
-                if buy_confidence >= sell_confidence:
-                    signal_type = "Buy"
-                    buy_signal = True
-                    sell_signal = False
-                else:
                     signal_type = "Sell"
-                    buy_signal = False
+                    buy_signal = False  # Prioritize sell signal if both are present
                     sell_signal = True
         # self.default_logger.debug(f"Level 7 for {stock_name}: Returned result=Buy:{buy_signal}, Sell:{sell_signal}, Buy_Conf:{buy_confidence}, signal_type:{signal_type}, Sell_Conf:{sell_confidence}")
         # =========================================================================
@@ -2442,7 +2434,13 @@ class ScreeningStatistics:
             saveDict["Confidence"] = buy_confidence if buy_signal else sell_confidence if sell_signal else 0
             screenDict["Confidence"] = buy_confidence if buy_signal else sell_confidence if sell_signal else 0
             if result:
-                if buy_signal and buy_confidence > 0:
+                if buy_signal and sell_signal:
+                    saveDict["B/S"] = signal_type
+                    saveDict["Signal_Strength"] = signal_strength
+                    saveDict["Confidence"] = buy_confidence if buy_confidence >= sell_confidence else sell_confidence
+                    screenDict["Confidence"] = buy_confidence if buy_confidence >= sell_confidence else sell_confidence
+                    screenDict["B/S[%]"] = colorText.GREEN + f"{signal_type}[{int(buy_confidence)}]" + colorText.END
+                elif buy_signal and buy_confidence > 0:
                     screenDict["B/S[%]"] = colorText.GREEN + f"{signal_type}[{int(buy_confidence)}]" + colorText.END
                 elif sell_signal and sell_confidence > 0:
                     screenDict["B/S[%]"] = colorText.FAIL + f"{signal_type}[{int(sell_confidence)}]" + colorText.END
