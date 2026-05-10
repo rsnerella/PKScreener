@@ -577,7 +577,7 @@ jobs:
 
       - name: Save Binaries as Artifacts
         uses: actions/upload-artifact@v4
-        timeout-minutes: 20
+        timeout-minutes: 2
         continue-on-error: true
         with:
           name: ${{ matrix.FILE_NAME }}
@@ -585,7 +585,7 @@ jobs:
 
       - name: Upload Binaries to Release
         uses: svenstaro/upload-release-action@v2
-        timeout-minutes: 20
+        timeout-minutes: 2
         continue-on-error: true
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
