@@ -499,13 +499,10 @@ def label_data_for_printing_impl(
                 else:
                     sort_key = ["volume"]
                     ascending = [False]
-            elif reversal_option in [4]:
-                if "Score" in save_results.columns:
-                    sort_key = ["Score"]
-                    ascending = [False]
-                else:
-                    sort_key = ["volume"]
-                    ascending = [False]
+            elif reversal_option in [4,7]:
+                sort_col = "Pattern_Score" if "Pattern_Score" in save_results.columns else ("Score" if "Score" in save_results.columns else "volume")
+                sort_key = [sort_col]
+                ascending = [False]
         elif execute_option == 23:
             sort_key = ["bbands_ulr_ratio_max5"] if "bbands_ulr_ratio_max5" in screen_results.columns else ["volume"]
             ascending = [False]
@@ -539,7 +536,7 @@ def label_data_for_printing_impl(
             default_logger().debug(e, exc_info=True)
         
         # Columns to delete
-        columns_to_be_deleted = ["MFI", "FVDiff", "ConfDMADifference", "bbands_ulr_ratio_max5", "RSIi"]
+        columns_to_be_deleted = ["MFI", "FVDiff", "ConfDMADifference", "bbands_ulr_ratio_max5", "RSIi", "Pattern_Score"]
         if menu_option not in ["F"]:
             columns_to_be_deleted.extend(["ScanOption"])
         if "EoDDiff" in save_results.columns:
@@ -563,6 +560,7 @@ def label_data_for_printing_impl(
         for column in columns_to_be_deleted:
             if column in save_results.columns:
                 save_results.drop(column, axis=1, inplace=True, errors="ignore")
+            if column in screen_results.columns:
                 screen_results.drop(column, axis=1, inplace=True, errors="ignore")
         
         # Set index

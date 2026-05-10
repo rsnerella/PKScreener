@@ -3659,6 +3659,23 @@ class ScreeningStatistics:
     def find_cup_and_handle(self, df_src, saveDict=None, screenDict=None, order=0):
         """
         Detect Cup and Handle pattern with integrated validation methods.
+        
+        Enhanced with 20 EMA retest and momentum confirmation for better signal quality.
+        
+        When configManager.cupAndHandle_20EMARetestOrMomentum is True:
+        1. After cup formation, the algorithm checks if price is retesting the 20 EMA
+        for handle formation (ideal entry point)
+        2. OR checks for momentum confirmation (volume surge + price action)
+        3. Returns True if either condition is met
+        
+        Args:
+            df_src: DataFrame with OHLCV data (newest first)
+            saveDict: Dictionary for saving results
+            screenDict: Dictionary for screen display
+            order: Order for extremum detection (auto-calculated if 0)
+        
+        Returns:
+            tuple: (is_valid, pattern_details) where pattern_details contains indices
         """
         try:
             from scipy.signal import argrelextrema
@@ -3673,6 +3690,10 @@ class ScreeningStatistics:
         if df_src is None or len(df_src) < 90:
             return False, None
         
+        # Get configuration for EMA retest/momentum check
+        check_ema_retest = getattr(self.configManager, 'cupAndHandle_20EMARetestOrMomentum', False)
+        ema_period = 20  # Standard 20 EMA for retest confirmation
+        
         # Make a copy and handle timezone
         df = df_src.copy()
         if df.index.tz is not None:
@@ -3683,6 +3704,10 @@ class ScreeningStatistics:
         
         # Ensure data is sorted with oldest first for pattern detection
         df_oldest_first = df[::-1].reset_index(drop=True)
+        
+        # Calculate 20 EMA for retest confirmation
+        if check_ema_retest:
+            df_oldest_first['EMA20'] = pktalib.EMA(df_oldest_first["close"], timeperiod=ema_period)
         
         close_prices = df_oldest_first["close"].values
         n = len(close_prices)
@@ -3735,6 +3760,10 @@ class ScreeningStatistics:
         best_pattern = None
         best_score = 0
         
+        # Store retest and momentum status for reporting
+        has_ema_retest = False
+        has_momentum = False
+        
         for cup_start, cup_bottom, cup_end, cup_rim_price in valid_cups:
             # Search for handle after cup end
             handle_search_end = min(cup_end + 35, n - 5)
@@ -3768,6 +3797,80 @@ class ScreeningStatistics:
             volume_valid = self.validate_volume_for_cup(df_oldest_first, cup_start, cup_end, handle_bottom_idx)
             if not volume_valid:
                 continue
+            
+            # =========================================================================
+            # STEP 3.5: 20 EMA RETEST AND MOMENTUM CHECK (if enabled)
+            # =========================================================================
+            ema_retest_valid = True  # Default to True if check is disabled
+            momentum_valid = True     # Default to True if check is disabled
+            
+            if check_ema_retest:
+                ema_retest_valid = False
+                momentum_valid = False
+                
+                # Get recent price and EMA data around the handle
+                recent_start = max(0, cup_end - 10)
+                recent_end = min(n, handle_bottom_idx + 10)
+                
+                if 'EMA20' in df_oldest_first.columns:
+                    ema_values = df_oldest_first['EMA20'].iloc[recent_start:recent_end].values
+                    price_values = close_prices[recent_start:recent_end]
+                    
+                    # Check if price is retesting 20 EMA (touching or very close to EMA)
+                    for i in range(len(price_values)):
+                        if len(ema_values) > i and ema_values[i] > 0:
+                            distance_to_ema = abs(price_values[i] - ema_values[i]) / ema_values[i] * 100
+                            if distance_to_ema < 1.5:  # Within 1.5% of 20 EMA
+                                ema_retest_valid = True
+                                break
+                    
+                    # Alternative: Check if price is bouncing off 20 EMA from below
+                    for i in range(1, len(price_values)):
+                        if len(ema_values) > i:
+                            # Price was below EMA, now above EMA (bounce)
+                            if (price_values[i-1] < ema_values[i-1] and 
+                                price_values[i] > ema_values[i]):
+                                distance_to_ema = abs(price_values[i] - ema_values[i]) / ema_values[i] * 100
+                                if distance_to_ema < 2.0:  # Within 2% after bounce
+                                    ema_retest_valid = True
+                                    break
+                
+                # Check for momentum confirmation
+                # Momentum conditions:
+                # 1. Volume surge in recent days
+                # 2. Price making higher highs after handle
+                # 3. RSI showing bullish momentum if available
+                
+                if 'volume' in df_oldest_first.columns:
+                    # Volume surge check
+                    volume_data = df_oldest_first['volume'].iloc[handle_bottom_idx:min(n, handle_bottom_idx + 10)].values
+                    if len(volume_data) >= 5:
+                        recent_volume = np.mean(volume_data[:5])
+                        prior_volume = np.mean(df_oldest_first['volume'].iloc[max(0, cup_end-20):cup_end].values)
+                        
+                        if prior_volume > 0 and recent_volume > prior_volume * 1.3:
+                            momentum_valid = True
+                
+                # Price momentum check
+                if not momentum_valid:
+                    # Check for higher highs after handle
+                    post_handle_prices = close_prices[handle_bottom_idx:min(n, handle_bottom_idx + 15)]
+                    if len(post_handle_prices) >= 3:
+                        if (post_handle_prices[1] > post_handle_prices[0] and 
+                            post_handle_prices[2] > post_handle_prices[1]):
+                            momentum_valid = True
+                
+                # RSI momentum check if available
+                if not momentum_valid and 'RSI' in df_oldest_first.columns:
+                    rsi_values = df_oldest_first['RSI'].iloc[handle_bottom_idx:min(n, handle_bottom_idx + 10)].values
+                    if len(rsi_values) >= 2:
+                        # RSI rising from oversold/neutral levels
+                        if rsi_values[-1] > rsi_values[0] and rsi_values[-1] > 55:
+                            momentum_valid = True
+                
+                # # For pattern to be valid, either EMA retest OR momentum must be true
+                # if not (ema_retest_valid or momentum_valid):
+                #     continue  # Skip this cup if neither condition is met
             
             # =========================================================================
             # STEP 4: CHECK FOR BREAKOUT
@@ -3811,6 +3914,15 @@ class ScreeningStatistics:
                 elif days_since_breakout <= 20:
                     score += 5
             
+            # Boost score if EMA retest or momentum confirmed
+            if check_ema_retest:
+                if ema_retest_valid:
+                    score += 10
+                    self.has_ema_retest = True
+                if momentum_valid:
+                    score += 10
+                    self.has_momentum = True
+            
             if score > best_score:
                 best_score = score
                 best_pattern = {
@@ -3822,13 +3934,15 @@ class ScreeningStatistics:
                     'cup_rim_price': cup_rim_price,
                     'cup_depth_pct': cup_depth_pct,
                     'handle_decline_pct': handle_decline_pct,
-                    'score': score
+                    'score': score,
+                    'ema_retest': ema_retest_valid if check_ema_retest else None,
+                    'momentum': momentum_valid if check_ema_retest else None
                 }
         
         # =========================================================================
         # STEP 5: RETURN RESULTS
         # =========================================================================
-        if best_pattern is None or best_score < 50:
+        if best_pattern is None or best_score < 30:
             return False, None
         
         pattern_details = (
@@ -3841,17 +3955,67 @@ class ScreeningStatistics:
         
         if saveDict is not None and screenDict is not None:
             saved = self.findCurrentSavedValue(screenDict, saveDict, "Pattern")
-            pattern_display = f"Cup&Handle (D:{best_pattern['cup_depth_pct']:.0f}%, H:{best_pattern['handle_decline_pct']:.0f}%)"
+            
+            # Build pattern display with additional info if retest/momentum enabled
+            if check_ema_retest and (best_pattern.get('ema_retest') or best_pattern.get('momentum')):
+                confirmation_tags = []
+                if best_pattern.get('ema_retest'):
+                    confirmation_tags.append("20EMA-Retest")
+                if best_pattern.get('momentum'):
+                    confirmation_tags.append("Momentum")
+                confirmation_str = f" [{'+'.join(confirmation_tags)}]"
+            else:
+                confirmation_str = ""
+
+            tier_quality = ""
+            if "cup_depth_pct" in best_pattern and "handle_decline_pct" in best_pattern:
+                # calculate quality tiers:
+                tier_quality = f"[WEAK]({best_score:.0f}) "
+                ideal_cup_depth_min = 15
+                ideal_cup_depth_max = 30
+                perfect_cup_depth_min = 20
+                perfect_cup_depth_max = 25
+
+                ideal_handle_decline_min = 5
+                ideal_handle_decline_max = 15
+                perfect_handle_decline_min = 8
+                perfect_handle_decline_max = 12
+
+                perfect_cup_depth = ideal_cup_depth_min <= best_pattern['cup_depth_pct'] <= ideal_cup_depth_max and perfect_cup_depth_min <= best_pattern['cup_depth_pct'] <= perfect_cup_depth_max
+                ideal_cup_depth = ideal_cup_depth_min <= best_pattern['cup_depth_pct'] and best_pattern['cup_depth_pct'] <= ideal_cup_depth_max
+                acceptable_cup_depth = 10 <= best_pattern['cup_depth_pct'] <= 40
+                
+                perfect_handle_decline = ideal_handle_decline_min <= best_pattern['handle_decline_pct'] <= ideal_handle_decline_max and perfect_handle_decline_min <= best_pattern['handle_decline_pct'] <= perfect_handle_decline_max
+                ideal_handle_decline = ideal_handle_decline_min <= best_pattern['handle_decline_pct'] and best_pattern['handle_decline_pct'] <= ideal_handle_decline_max
+                acceptable_handle_decline = 10 <= best_pattern['handle_decline_pct'] <= 50
+                
+                if perfect_cup_depth and perfect_handle_decline:
+                    tier_quality = f"[PERFECT]({best_score:.0f}) "
+                elif ideal_cup_depth and ideal_handle_decline:
+                    tier_quality = f"[IDEAL]({best_score:.0f}) "
+                elif acceptable_cup_depth and acceptable_handle_decline:
+                    tier_quality = f"[ACCEPTABLE]({best_score:.0f}) "
+            
+            pattern_display = f"{tier_quality}Cup&Handle{confirmation_str} (D:{best_pattern['cup_depth_pct']:.0f}%, H:{best_pattern['handle_decline_pct']:.0f}%)"
             
             screenDict["Pattern"] = saved[0] + colorText.GREEN + pattern_display + colorText.END
             saveDict["Pattern"] = saved[1] + pattern_display
             saveDict["Pattern_Score"] = best_score
+            screenDict["Pattern_Score"] = best_score
+            
+            # Store additional tracking info
+            if check_ema_retest:
+                saveDict["Cup_EMA_Retest"] = best_pattern.get('ema_retest', False)
+                saveDict["Cup_Momentum"] = best_pattern.get('momentum', False)
         
-        if self.default_logger and best_score >= 60:
-            self.default_logger.debug(
+        if self.default_logger and best_score >= 40:
+            logger_msg = (
                 f"Cup&Handle found: depth={best_pattern['cup_depth_pct']:.1f}%, "
                 f"handle={best_pattern['handle_decline_pct']:.1f}%, score={best_score:.0f}"
             )
+            if check_ema_retest:
+                logger_msg += f", EMA_Retest={best_pattern.get('ema_retest', False)}, Momentum={best_pattern.get('momentum', False)}"
+            self.default_logger.debug(logger_msg)
         
         return True, pattern_details
 

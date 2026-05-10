@@ -13,7 +13,7 @@ from PKDevTools.classes.log import default_logger
 
 from pkscreener.classes import ConsoleMenuUtility
 from pkscreener.classes.CandlePatterns import CandlePatterns
-
+import pkscreener.classes.ConfigManager as ConfigManager
 
 def handle_execute_option_3(userPassedArgs, configManager) -> int:
     """Handle execute option 3 - force evaluate all stocks"""
@@ -183,7 +183,7 @@ def handle_execute_option_7(
     
     # Handle candlestick patterns
     if respChartPattern == 7:
-        maLength, insideBarToLookback = _handle_candlestick_patterns(userPassedArgs, m0, selectedChoice, insideBarToLookback=insideBarToLookback, maLength=maLength)
+        maLength, insideBarToLookback = _handle_candlestick_patterns(configManager, userPassedArgs, m0, selectedChoice, insideBarToLookback=insideBarToLookback, maLength=maLength)
         if maLength is None:
             return None, None, None
     
@@ -294,7 +294,7 @@ def _configure_super_confluence(options, userPassedArgs, configManager, ConfigMa
         configManager.setConfig(ConfigManager.parser, default=True, showFileCreatedText=False)
 
 
-def _handle_candlestick_patterns(userPassedArgs, m0, selectedChoice, insideBarToLookback, maLength='0') -> Tuple[Optional[int], Optional[int]]:
+def _handle_candlestick_patterns(configManager,userPassedArgs, m0, selectedChoice, insideBarToLookback, maLength='0') -> Tuple[Optional[int], Optional[int]]:
     """Handle candlestick pattern selection"""
     # maLength = "0"
     if userPassedArgs is None or userPassedArgs.answerdefault is None:
@@ -308,6 +308,11 @@ def _handle_candlestick_patterns(userPassedArgs, m0, selectedChoice, insideBarTo
                 "[+] Enter number of candles to consider for left cup side formation:"
             )) or "0"
             insideBarToLookback = str(cupnHandleIndex)
+            configManager.cupAndHandle_20EMARetestOrMomentum = True if "n" not in str(input(
+                        f"  [+] For Cup and Handle pattern, consider it a valid pattern if there is a retest of 20 EMA after the breakout or if there is momentum after breakout? (Y/N, {colorText.GREEN}Recommended :Y{colorText.END}, Current: {colorText.FAIL}{'y' if configManager.cupAndHandle_20EMARetestOrMomentum else 'n'}{colorText.END}): "
+                    ) or ('y' if configManager.cupAndHandle_20EMARetestOrMomentum else 'n')
+                ).lower() else False
+            configManager.setConfig(ConfigManager.parser, default=True, showFileCreatedText=False)
         
         if str(filterOption).upper() not in ["0", "M", cupnHandleIndex]:
             maLength = str(filterOption)

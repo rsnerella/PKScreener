@@ -74,6 +74,7 @@ class tools(SingletonMixin, metaclass=SingletonType):
         self.shuffleEnabled = True
         self.alwaysExportToExcel = False
         self.cacheEnabled = True
+        self.cupAndHandle_20EMARetestOrMomentum = True
         self.stageTwo = False
         self.useEMA = False
         self.showunknowntrends = True
@@ -255,6 +256,7 @@ class tools(SingletonMixin, metaclass=SingletonType):
             parser.set("config", "barometerwindowheight", str(self.barometerwindowheight))
             parser.set("config", "baseIndex", str(self.baseIndex))
             parser.set("config", "cacheStockData", "y" if self.cacheEnabled else "n")
+            parser.set("config", "cupAndHandle_20EMARetestOrMomentum", "y" if self.cupAndHandle_20EMARetestOrMomentum else "n")
             parser.set("config", "calculatersiintraday", "y" if self.calculatersiintraday else "n")
             parser.set("config", "daysToLookback", str(self.daysToLookback))
             parser.set("config", "defaultIndex", str(self.defaultIndex))
@@ -379,6 +381,11 @@ class tools(SingletonMixin, metaclass=SingletonType):
                     input(
                         f"  [+] Enable High-Performance and Data-Saver mode? (This uses little bit more CPU but performs High Performance Screening) (Y/N, Current: {colorText.FAIL}{('y' if self.cacheEnabled else 'n')}{colorText.END}): "
                     ) or ('y' if self.cacheEnabled else 'n')
+                ).lower()
+                self.cupAndHandle_20EMARetestOrMomentum = str(
+                    input(
+                        f"  [+] For Cup and Handle pattern, consider it a valid pattern if there is a retest of 20 EMA after the breakout or if there is momentum after breakout? (Y/N, Current: {colorText.FAIL}{'y' if self.cupAndHandle_20EMARetestOrMomentum else 'n'}{colorText.END}): "
+                    ) or ('y' if self.cupAndHandle_20EMARetestOrMomentum else 'n')
                 ).lower()
                 self.stageTwoPrompt = str(
                     input(
@@ -709,6 +716,11 @@ class tools(SingletonMixin, metaclass=SingletonType):
                 self.cacheEnabled = (
                     True
                     if "n" not in str(parser.get("config", "cachestockdata")).lower()
+                    else False
+                )
+                self.cupAndHandle_20EMARetestOrMomentum = (
+                    True
+                    if "n" not in str(parser.get("config", "cupAndHandle_20EMARetestOrMomentum")).lower()
                     else False
                 )
                 self.stageTwo = (
