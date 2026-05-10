@@ -549,6 +549,7 @@ jobs:
         if: startsWith(runner.os, 'Linux')
         id: read_release
         shell: bash
+        timeout-minutes: 5
         run: |
           pip3 install mistletoe
           python3 .github/workflows/updateVersion.py -p pkscreener/release.md -f /${{ steps.vars.outputs.CURRENT_VERSION }}/ -r /${{ steps.vars.outputs.THIS_VERSION }}/ -t link
@@ -560,6 +561,7 @@ jobs:
 
       - name: Install dependencies for ${{ matrix.TARGET }}
         shell: bash
+        timeout-minutes: 10
         run: ${{ matrix.DEP_BUILD }}
 
       - name: Build for ${{ matrix.TARGET }}
@@ -569,7 +571,7 @@ jobs:
 
       - name: Test Built Binary for ${{ matrix.TARGET }}
         shell: bash
-        timeout-minutes: 1
+        timeout-minutes: 2
         continue-on-error: true
         run: ${{ matrix.TEST_BUILD }}
         env:
@@ -577,12 +579,14 @@ jobs:
 
       - name: Save Binaries as Artifacts
         uses: actions/upload-artifact@v4
+        timeout-minutes: 20
         with:
           name: ${{ matrix.FILE_NAME }}
           path: ${{ matrix.OUT_PATH }}
 
       - name: Upload Binaries to Release
         uses: svenstaro/upload-release-action@v2
+        timeout-minutes: 10
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: ${{ matrix.OUT_PATH }}
