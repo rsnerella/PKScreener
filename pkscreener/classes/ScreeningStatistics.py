@@ -544,10 +544,12 @@ class ScreeningStatistics:
                 return df, {}
             
             # Check if ATRTrailingStop column exists
+            # Ensure ATRTrailingStop column exists (fallback calculation if missing)
             if 'ATRTrailingStop' not in df.columns:
                 if self.default_logger:
-                    self.default_logger.error("computeBuySellSignals: 'ATRTrailingStop' column not found for stock: {stock_name}")
-                return df, {}
+                    self.default_logger.warning(f"ATRTrailingStop column missing, calculating fallback for {stock_name}")
+                # Fallback: simple trailing stop based on close price
+                df['ATRTrailingStop'] = df['close'] * 0.95  # 5% below close as simple stop
             
             # Initialize all signal columns with default values
             df["Above"] = False
@@ -738,50 +740,64 @@ class ScreeningStatistics:
 
                         # ============ ADDITIONAL SELL SIGNALS FOR BEARISH MARKET ============
                         # These provide sell signals even when ATR conditions aren't met
-                        if not df["Sell"].any() and confirmation_bars <= 2:
+                        if confirmation_bars <= 2:
                             
                             # 1. Death Cross (50 SMA crosses below 200 SMA) - Strong sell signal
                             if "SMA" in df.columns and "LMA" in df.columns and len(df) > 2:
                                 death_cross = (df["SMA"] < df["LMA"]) & (df["SMA"].shift(1) > df["LMA"].shift(1))
-                                if death_cross.any():
-                                    df.loc[death_cross, "Sell"] = True
-                                    df.loc[death_cross, "Signal_Strength"] = 4  # Strong signal
-                                    df.loc[death_cross, "Sell_Confidence"] = 85
-                                    if self.default_logger:
-                                        self.default_logger.debug("Added death cross sell signals")
+                                df.loc[death_cross & ~df["Sell"], "Sell"] = True
+                                df.loc[death_cross & ~df["Sell"], "Signal_Strength"] = 4
+                                df.loc[death_cross & ~df["Sell"], "Sell_Confidence"] = 85
+                                if self.default_logger and (death_cross & ~df["Sell"]).any():
+                                    self.default_logger.debug("Added death cross sell signals")
                             
                             # 2. Close below 200 SMA (major breakdown) - Moderate sell signal
-                            if "LMA" in df.columns and not df["Sell"].any():
+                            if "LMA" in df.columns:
                                 below_200 = (df["close"] < df["LMA"]) & (df["close"].shift(1) > df["LMA"].shift(1))
-                                if below_200.any():
-                                    df.loc[below_200, "Sell"] = True
-                                    df.loc[below_200, "Signal_Strength"] = 3
-                                    df.loc[below_200, "Sell_Confidence"] = 70
-                                    if self.default_logger:
-                                        self.default_logger.debug("Added below 200MA sell signals")
+                                df.loc[below_200 & ~df["Sell"], "Sell"] = True
+                                df.loc[below_200 & ~df["Sell"], "Signal_Strength"] = 3
+                                df.loc[below_200 & ~df["Sell"], "Sell_Confidence"] = 75
+                                if self.default_logger and (below_200 & ~df["Sell"]).any():
+                                    self.default_logger.debug("Added below 200MA sell signals")
                             
                             # 3. 5-day EMA crossing below 20-day EMA (short-term bearish)
                             if len(df) > 20:
                                 ema5 = df["close"].ewm(span=5, adjust=False).mean()
                                 ema20 = df["close"].ewm(span=20, adjust=False).mean()
                                 ema_cross_below = (ema5 < ema20) & (ema5.shift(1) > ema20.shift(1))
-                                if ema_cross_below.any() and not df["Sell"].any():
-                                    df.loc[ema_cross_below, "Sell"] = True
-                                    df.loc[ema_cross_below, "Signal_Strength"] = 2
-                                    df.loc[ema_cross_below, "Sell_Confidence"] = 55
-                                    if self.default_logger:
-                                        self.default_logger.debug("Added EMA5/20 cross sell signals")
+                                df.loc[ema_cross_below & ~df["Sell"], "Sell"] = True
+                                df.loc[ema_cross_below & ~df["Sell"], "Signal_Strength"] = 2
+                                df.loc[ema_cross_below & ~df["Sell"], "Sell_Confidence"] = 55
+                                if self.default_logger and (ema_cross_below & ~df["Sell"]).any():
+                                    self.default_logger.debug("Added EMA5/20 cross sell signals")
                             
-                            # 4. RSI downtrend with bearish divergence
-                            if "RSI" in df.columns and len(df) > 5:
+                            # 4. RSI overbought (bearish signal)
+                            if "RSI" in df.columns:
+                                rsi_overbought = df["RSI"] > 70
+                                df.loc[rsi_overbought & ~df["Sell"], "Sell"] = True
+                                df.loc[rsi_overbought & ~df["Sell"], "Signal_Strength"] = 2
+                                df.loc[rsi_overbought & ~df["Sell"], "Sell_Confidence"] = 60
+                                if self.default_logger and (rsi_overbought & ~df["Sell"]).any():
+                                    self.default_logger.debug("Added RSI overbought sell signals")
+                            
+                            # 5. Price below 20 SMA (bearish)
+                            if "SMA" in df.columns:
+                                price_below_sma = df["close"] < df["SMA"]
+                                df.loc[price_below_sma & ~df["Sell"], "Sell"] = True
+                                df.loc[price_below_sma & ~df["Sell"], "Signal_Strength"] = 3
+                                df.loc[price_below_sma & ~df["Sell"], "Sell_Confidence"] = 65
+                                if self.default_logger and (price_below_sma & ~df["Sell"]).any():
+                                    self.default_logger.debug("Added price below SMA sell signals")
+                            
+                            # 6. RSI downtrend with bearish divergence
+                            if "RSI" in df.columns and len(df) > 5 and not df["Sell"].any():
                                 # RSI falling from overbought (>70) to below 50
                                 rsi_falling = (df["RSI"] < 50) & (df["RSI"].shift(1) >= 70)
-                                if rsi_falling.any() and not df["Sell"].any():
-                                    df.loc[rsi_falling, "Sell"] = True
-                                    df.loc[rsi_falling, "Signal_Strength"] = 3
-                                    df.loc[rsi_falling, "Sell_Confidence"] = 65
-                                    if self.default_logger:
-                                        self.default_logger.debug("Added RSI falling from overbought sell signals")
+                                df.loc[rsi_falling & ~df["Sell"], "Sell"] = True
+                                df.loc[rsi_falling & ~df["Sell"], "Signal_Strength"] = 3
+                                df.loc[rsi_falling & ~df["Sell"], "Sell_Confidence"] = 70
+                                if self.default_logger and (rsi_falling & ~df["Sell"]).any():
+                                    self.default_logger.debug("Added RSI falling from overbought sell signals")
 
                         # ============ CONFIDENCE SCORES (0-100) ============
                         # Buy confidence calculation
@@ -2223,13 +2239,18 @@ class ScreeningStatistics:
         data = data.replace([np.inf, -np.inf], 0)
         data = data[::-1]  # Reverse to oldest first (required for ATR)
         
-        if len(data) > 100:
-            data = data.tail(100)
+        if len(data) > 150:
+            data = data.tail(150)
         
         try:
             # Calculate ATR
             data["xATR"] = pktalib.ATR(data["high"], data["low"], data["close"], timeperiod=atr_period)
             data["nLoss"] = sensitivity * data["xATR"]
+            
+            # Calculate additional indicators needed for sell signals
+            data["SMA"] = data["close"].rolling(window=20, min_periods=10).mean()
+            data["LMA"] = data["close"].rolling(window=50, min_periods=20).mean()
+            data["RSI"] = pktalib.RSI(data["close"], timeperiod=14)
             
             data = data.dropna()
             if len(data) < atr_period + 5:
