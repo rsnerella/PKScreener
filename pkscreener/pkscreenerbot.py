@@ -462,7 +462,7 @@ def registerUser(user, forceFetch=False, query=None):
                     query.answer(text="Still working. Please wait...", show_alert=False)
                 except:
                     pass
-                resp = tryFetchFromServer(cache_file=f"{user.id}.pdf",directory="results/Data",hideOutput=False, branchName="SubData", no_cache=True)
+                resp = tryFetchFromServer(cache_file=f"{user.id}.pdf",directory="results/Data",hideOutput=False, branchName="SubData")
                 if resp is None or resp.status_code != 200:
                     trial_attempt = trial_attempt + 1
                     sleep(10)
@@ -475,7 +475,7 @@ def registerUser(user, forceFetch=False, query=None):
 def tryFetchFromServer(cache_file,repoOwner="pkjmesra",repoName="PKScreener",directory="results/Data",hideOutput=False,branchName="refs/heads/actions-data-download"):
     resp = None
     try:
-        cache_buster = f"?t={int(time.time())}"
+        cache_buster = f"?t={int(time())}"
         cache_url = f"https://raw.githubusercontent.com/{repoOwner}/{repoName}/{branchName}/{directory}/{cache_file}{cache_buster}"
         headers = {
                     'authority': 'raw.githubusercontent.com',
@@ -498,7 +498,7 @@ def tryFetchFromServer(cache_file,repoOwner="pkjmesra",repoName="PKScreener",dir
         headers['Pragma']= 'no-cache'
         resp = requests.get(cache_url, headers=headers, timeout=30)
         default_logger().debug(f"Fetching cache file: {cache_file} with no_cache=True, status code: {resp.status_code}")
-    except:
+    except Exception as e:
         pass
     return resp
     
